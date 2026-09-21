@@ -321,6 +321,9 @@ body.day-mode header.border-b {
                 <button type="button" id="btn-find-toggle" onclick="toggleFindPanel()" title="본문에서 단어·문장 찾기" class="shrink-0 px-2.5 py-1 rounded-lg text-[15px] font-bold bg-stone-800 hover:bg-stone-700 text-sky-300 border border-stone-700 active:scale-95 transition flex items-center space-x-1">
                     <i class="fa-solid fa-magnifying-glass text-[15px]"></i>
                 </button>
+                <button type="button" id="btn-zoom-toggle" onclick="toggleZoomPanel()" title="화면 확대/축소 (50~200%)" class="shrink-0 px-2.5 py-1 rounded-lg text-[15px] font-bold bg-stone-800 hover:bg-stone-700 text-emerald-300 border border-stone-700 active:scale-95 transition flex items-center space-x-1">
+                    <i class="fa-solid fa-desktop text-[15px]"></i>
+                </button>
             </div>
 
             <div id="find-panel" class="hidden" style="background:#ffffff; border:1px solid #d6d3d1; border-radius:16px; padding:10px; box-shadow:0 2px 8px rgba(0,0,0,0.25);">
@@ -2375,14 +2378,16 @@ body.day-mode header.border-b {
             const card = document.getElementById('reader-title-card');
             let r = card ? card.getBoundingClientRect() : null;
             if (!r || r.width < 50) r = { bottom: 56, left: 8, width: window.innerWidth - 16 };
-            const top = Math.max(8, r.bottom + 6);
+            const kk = getRectToViewportFactor();     // 좌표 → 화면 단위
+            const zz = pageZoom || 1;                 // 화면 단위 → 확대된 화면 안의 단위
+            const topVP = Math.max(8, r.bottom * kk + 6);
             panel.style.position = 'fixed';
-            panel.style.top = top + 'px';
-            panel.style.left = r.left + 'px';
-            panel.style.width = r.width + 'px';
+            panel.style.top = (topVP / zz) + 'px';
+            panel.style.left = ((r.left * kk) / zz) + 'px';
+            panel.style.width = ((r.width * kk) / zz) + 'px';
             panel.style.zIndex = '60';
             panel.style.boxSizing = 'border-box';
-            panel.style.maxHeight = Math.max(160, window.innerHeight - top - 12) + 'px';
+            panel.style.maxHeight = (Math.max(160, window.innerHeight - topVP - 12) / zz) + 'px';
             panel.style.overflowY = 'auto';
         }
         window.addEventListener('scroll', positionFindPanel, { passive: true });
@@ -5041,7 +5046,113 @@ body.day-mode header.border-b {
 
         // 제목 카드를, sticky 대신 스크롤 위치를 직접 계산해서 화면에 확실히 고정시킨다.
         // (sticky는 상황에 따라 예상대로 안 붙는 경우가 있어서, 더 확실한 방식으로 대신한다.)
-        function updateReaderTitleCardPosition() {
+// ================= 화면 확대/축소 (50~200%) =================
+        // 크롬의 확대/축소처럼 화면 전체(글자·버튼·간격)가 함께 커지고 줄어든다. 정한 크기는 기억해 둔다.
+        var ZOOM_MIN = 50, ZOOM_MAX = 200, ZOOM_STEP = 10, ZOOM_KEY = 'audiobook_page_zoom';
+        var pageZoom = 1;
+        var _fixedScaleCache = null;
+
+        // 화면을 확대하면 브라우저마다 좌표(getBoundingClientRect)와 고정 위치(position:fixed) 값의 단위가 다르게 나올 수 있다.
+        // 그래서 눈에 안 보이는 점 하나를 두고 "실제로 얼마나 배율이 적용되는지" 재서 맞춘다. (100%일 때는 항상 1)
+        function getFixedScale() {
+            if (_fixedScaleCache !== null) return _fixedScaleCache;
+            let p = document.getElementById('zoom-probe');
+            if (!p) {
+                p = document.createElement('div');
+                p.id = 'zoom-probe';
+                p.style.cssText = 'position:fixed;left:100px;top:0;width:1px;height:1px;visibility:hidden;pointer-events:none;';
+                document.body.appendChild(p);
+            }
+            const v = p.getBoundingClientRect().left / 100;
+            _fixedScaleCache = (isFinite(v) && v > 0) ? v : 1;
+            return _fixedScaleCache;
+        }
+        // getBoundingClientRect 좌표 한 칸이 화면(뷰포트) 몇 칸인지
+        function getRectToViewportFactor() { return (pageZoom || 1) / getFixedScale(); }
+
+        function ensureZoomPanel() {
+            let panel = document.getElementById('zoom-panel');
+            if (panel) return panel;
+            panel = document.createElement('div');
+            panel.id = 'zoom-panel';
+            panel.style.cssText = 'display:none; position:fixed; z-index:9999; width:250px; box-sizing:border-box; background:#ffffff; color:#1c1917; border:1px solid #d6d3d1; border-radius:14px; padding:10px; box-shadow:0 4px 14px rgba(0,0,0,.35);';
+            panel.innerHTML =
+                '<div style="display:flex; align-items:center; gap:8px;">' +
+                  '<button type="button" class="nb" id="zoom-minus" aria-label="축소" style="font-size:20px; font-weight:700; line-height:1;">−</button>' +
+                  '<input type="range" id="zoom-range" min="' + ZOOM_MIN + '" max="' + ZOOM_MAX + '" step="' + ZOOM_STEP + '" style="flex:1; min-width:0; accent-color:#059669;">' +
+                  '<button type="button" class="nb" id="zoom-plus" aria-label="확대" style="font-size:20px; font-weight:700; line-height:1;">+</button>' +
+                '</div>' +
+                '<div style="text-align:center; margin-top:8px; font-size:15px;">' +
+                  '화면 <button type="button" id="zoom-reset" title="누르면 100%로 돌아가요" style="font-weight:700; color:#047857; padding:2px 8px; border-radius:8px; border:1px solid #d6d3d1; background:#f5f5f4; cursor:pointer;">100%</button>' +
+                '</div>';
+            document.documentElement.appendChild(panel);   // 확대되는 화면(body) 밖에 두어서, 창 크기가 변하지 않게 한다
+            panel.querySelector('#zoom-minus').onclick = () => applyPageZoom(Math.round(pageZoom * 100) - ZOOM_STEP, true);
+            panel.querySelector('#zoom-plus').onclick = () => applyPageZoom(Math.round(pageZoom * 100) + ZOOM_STEP, true);
+            panel.querySelector('#zoom-reset').onclick = () => applyPageZoom(100, true);
+            panel.querySelector('#zoom-range').oninput = (e) => applyPageZoom(parseInt(e.target.value, 10), true);
+            return panel;
+        }
+
+        function updateZoomPanelUI(pct) {
+            const panel = document.getElementById('zoom-panel');
+            if (!panel) return;
+            panel.querySelector('#zoom-range').value = String(pct);
+            panel.querySelector('#zoom-reset').textContent = pct + '%';
+        }
+
+        function positionZoomPanel() {
+            const panel = document.getElementById('zoom-panel');
+            const btn = document.getElementById('btn-zoom-toggle');
+            if (!panel || panel.style.display === 'none' || !btn) return;
+            const k = getRectToViewportFactor();
+            const r = btn.getBoundingClientRect();
+            const top = r.bottom * k + 6;
+            const right = window.innerWidth - r.right * k;
+            panel.style.top = Math.max(8, top) + 'px';
+            panel.style.right = Math.max(8, right) + 'px';
+            panel.style.left = 'auto';
+        }
+
+        function toggleZoomPanel(force) {
+            const panel = ensureZoomPanel();
+            const open = (typeof force === 'boolean') ? force : (panel.style.display === 'none');
+            panel.style.display = open ? 'block' : 'none';
+            if (open) {
+                updateZoomPanelUI(Math.round(pageZoom * 100));
+                positionZoomPanel();
+            }
+        }
+
+        function applyPageZoom(pct, save) {
+            pct = Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, pct)) / ZOOM_STEP) * ZOOM_STEP;
+            pageZoom = pct / 100;
+            document.body.style.zoom = (pct === 100) ? '' : String(pageZoom);
+            _fixedScaleCache = null;
+            updateZoomPanelUI(pct);
+            if (save) { try { localStorage.setItem(ZOOM_KEY, String(pct)); } catch (e) {} }
+            // 고정된 요소(제목 카드, 찾기 창 등)의 위치를 새 배율에 맞춰 다시 잡는다
+            try { updateReaderTitleCardPosition(); } catch (e) {}
+            try { positionFindPanel(); } catch (e) {}
+            positionZoomPanel();
+        }
+
+        function initPageZoom() {
+            let saved = 100;
+            try { const v = parseInt(localStorage.getItem(ZOOM_KEY), 10); if (!isNaN(v)) saved = v; } catch (e) {}
+            if (saved !== 100) applyPageZoom(saved, false);
+        }
+        document.addEventListener('click', (e) => {
+            const panel = document.getElementById('zoom-panel');
+            if (!panel || panel.style.display === 'none') return;
+            if (panel.contains(e.target) || (e.target.closest && e.target.closest('#btn-zoom-toggle'))) return;
+            toggleZoomPanel(false);
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleZoomPanel(false); });
+        window.addEventListener('resize', positionZoomPanel);
+        window.addEventListener('scroll', positionZoomPanel, { passive: true });
+
+        
+function updateReaderTitleCardPosition() {
             const card = document.getElementById('reader-title-card');
             const spacer = document.getElementById('reader-title-card-spacer');
             const header = document.querySelector('header');
@@ -5058,17 +5169,19 @@ body.day-mode header.border-b {
             if (refTop <= headerHeight) {
                 if (!isFixed) {
                     const rect = card.getBoundingClientRect();
-                    spacer.style.height = `${rect.height}px`;
+                    spacer.style.height = `${rect.height / getFixedScale()}px`;
                     card.classList.add('reader-title-fixed');
                     spacer.classList.remove('hidden');
                 }
                 // 화면 크기가 바뀌어도(창 크기 조절 등) 항상 지금 받침대(spacer)의 실제
                 // 폭·위치에 맞춰서 다시 계산한다 — 그래야 폭이 좁아져서 내용이 줄바꿈되는
                 // 문제가 생기지 않는다.
+                const fs = getFixedScale();
                 const liveRect = spacer.getBoundingClientRect();
-                card.style.left = `${liveRect.left}px`;
-                card.style.width = `${liveRect.width}px`;
-                card.style.top = `${headerHeight}px`;
+                card.style.left = `${liveRect.left / fs}px`;
+                card.style.width = `${liveRect.width / fs}px`;
+                card.style.top = `${headerHeight / fs}px`;
+                spacer.style.height = `${card.getBoundingClientRect().height / fs}px`;
             } else {
                 if (isFixed) {
                     card.classList.remove('reader-title-fixed');
@@ -5082,6 +5195,8 @@ body.day-mode header.border-b {
         }
         window.addEventListener('scroll', updateReaderTitleCardPosition, { passive: true });
         window.addEventListener('resize', updateReaderTitleCardPosition);
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initPageZoom);
+        else initPageZoom();
 
         function toggleReaderFullscreen() {
             const el = document.getElementById('reader-container');
@@ -5126,7 +5241,7 @@ body.day-mode header.border-b {
                 const desiredCenterY = containerRect.top + titleBarHeight + availableHeight / 2;
                 const deltaY = elCenterY - desiredCenterY;
 
-                container.scrollBy({ top: deltaY, behavior: 'smooth' });
+                container.scrollBy({ top: deltaY / getFixedScale(), behavior: 'smooth' });
                 return;
             }
 
@@ -5134,11 +5249,12 @@ body.day-mode header.border-b {
             const titleCard = document.getElementById('reader-title-card');
             const headerHeight = header ? header.getBoundingClientRect().height : 0;
             const titleCardHeight = titleCard ? titleCard.getBoundingClientRect().height : 0;
-            const topOffset = headerHeight + titleCardHeight;
+            const kk = getRectToViewportFactor();   // 화면 확대 중에도 좌표 단위를 맞춘다 (100%면 1)
+            const topOffset = (headerHeight + titleCardHeight) * kk;
             const availableHeight = window.innerHeight - topOffset;
 
             const elRect = el.getBoundingClientRect();
-            const elCenterY = elRect.top + elRect.height / 2;
+            const elCenterY = (elRect.top + elRect.height / 2) * kk;
             const desiredCenterY = topOffset + availableHeight / 2;
             const deltaY = elCenterY - desiredCenterY;
 
@@ -6473,7 +6589,7 @@ body.day-mode header.border-b {
                 const label = getLabelForRatio(ratio);
                 if (label === null) return;
                 preview.textContent = label;
-                preview.style.left = `${ratio * rect.width}px`;
+                preview.style.left = `${(ratio * rect.width) / getFixedScale()}px`;
                 preview.classList.remove('hidden');
             });
             slider.addEventListener('mouseleave', () => preview.classList.add('hidden'));
