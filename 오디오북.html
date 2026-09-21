@@ -245,7 +245,7 @@ body.day-mode header.border-b {
 /* 화면 확대창에서 배율을 낮춰 "실제로 보이는 폭"이 넓어지면(기본 700px 이상), 본문과 플레이어를
    PC 화면처럼 나란히 배치한다. (원래 이 배치는 화면이 1024px 이상일 때만 자동으로 됐는데,
    앱 안에서 만든 확대는 실제 화면 폭 자체를 바꾸지 못해서 별도로 켜준다.) */
-body.zoom-wide main.grid { grid-template-columns: 7fr 5fr !important; }
+body.zoom-wide main.grid { grid-template-columns: 1fr 1fr !important; }
 body.zoom-wide main > section { order: 1 !important; }
 body.zoom-wide main > aside {
     order: 2 !important; position: sticky !important; top: 5rem !important;
@@ -311,7 +311,7 @@ body.zoom-wide main > aside {
     <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
         
         <!-- 왼쪽: 본문 영역 -->
-        <section class="order-2 lg:order-1 lg:col-span-7 flex flex-col space-y-3 sm:space-y-4">
+        <section class="order-2 lg:order-1 lg:col-span-6 flex flex-col space-y-3 sm:space-y-4">
             <div id="reader-title-card-spacer" class="hidden" style="height: 0;"></div>
             <div id="reader-title-card" class="bg-stone-800/40 border border-stone-800 rounded-2xl p-3 sm:p-4 flex items-center space-x-2 sm:space-x-3 overflow-hidden shadow-lg">
                 
@@ -390,7 +390,7 @@ body.zoom-wide main > aside {
         </section>
 
         <!-- 오른쪽: 기능 제어 패널 -->
-        <aside class="order-1 lg:order-2 lg:col-span-5 flex flex-col space-y-4 sm:space-y-5 static lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto pb-4 pr-1">
+        <aside class="order-1 lg:order-2 lg:col-span-6 flex flex-col space-y-4 sm:space-y-5 static lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto pb-4 pr-1">
             
             <!-- 오디오북 챕터 생성 -->
             <div class="bg-stone-800/40 border border-stone-800 rounded-2xl p-4 sm:p-5 space-y-3">
@@ -5155,6 +5155,7 @@ body.zoom-wide main > aside {
             if (save) { try { localStorage.setItem(ZOOM_KEY, String(pct)); } catch (e) {} }
             // 고정된 요소(제목 카드, 찾기 창 등)의 위치를 새 배율에 맞춰 다시 잡는다
             updateWideZoomLayout();
+            updateAsideZoomMetrics();
             try { updateReaderTitleCardPosition(); } catch (e) {}
             try { positionFindPanel(); } catch (e) {}
             positionZoomPanel();
@@ -5172,11 +5173,28 @@ body.zoom-wide main > aside {
             toggleZoomPanel(false);
         });
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleZoomPanel(false); });
-        window.addEventListener('resize', () => { updateWideZoomLayout(); positionZoomPanel(); });
-        window.addEventListener('scroll', positionZoomPanel, { passive: true });
+        window.addEventListener('resize', () => { updateWideZoomLayout(); updateAsideZoomMetrics(); positionZoomPanel(); });
+        window.addEventListener('scroll', () => { updateAsideZoomMetrics(); positionZoomPanel(); }, { passive: true });
 
-        
-function updateReaderTitleCardPosition() {
+// 오른쪽(플레이어) 칸의 높이: vh 단위 대신, 실제로 보이는 화면 높이를 직접 재서 넣는다.
+        // (body{zoom}과 함께 쓰면 vh가 실제 화면과 다르게 계산되고, 재생 중 자동 스크롤로
+        //  폰 주소창이 나타났다/사라졌다 하면서 화면 높이 자체도 바뀌어 흔들림이 생긴다.
+        //  window.visualViewport가 있으면 그걸로, 없으면 window.innerHeight로 잰다.)
+        function getRealViewportHeight() {
+            return (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+        }
+        function updateAsideZoomMetrics() {
+            const aside = document.querySelector('main > aside');
+            if (!aside) return;
+            if (!document.body.classList.contains('zoom-wide')) { aside.style.maxHeight = ''; return; }
+            const fs = getFixedScale() || 1;
+            const BOTTOM_MARGIN_PX = 96; // 원래 CSS의 6rem과 같은 여백
+            const realMax = Math.max(160, getRealViewportHeight() - BOTTOM_MARGIN_PX);
+            aside.style.maxHeight = (realMax / fs) + 'px';
+        }
+        if (window.visualViewport) window.visualViewport.addEventListener('resize', updateAsideZoomMetrics);
+
+        function updateReaderTitleCardPosition() {
             const card = document.getElementById('reader-title-card');
             const spacer = document.getElementById('reader-title-card-spacer');
             const header = document.querySelector('header');
