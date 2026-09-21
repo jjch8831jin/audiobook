@@ -518,7 +518,7 @@ body.day-mode header.border-b {
                 <div class="flex items-center justify-between flex-wrap gap-2 px-0.5">
                     <span class="text-[15px] text-stone-400 font-semibold uppercase tracking-wider whitespace-nowrap"><i class="fa-solid fa-book-open-reader text-amber-400 mr-1.5"></i>문장읽기 컨트롤</span>
                     <div class="flex items-center gap-1.5 shrink-0">
-                        <input type="file" id="main-audio-input" class="hidden" multiple accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac,.webm" onchange="handleMainAudioUpload(event)">
+                        <input type="file" id="main-audio-input" class="hidden" multiple onchange="handleMainAudioUpload(event)">
                         <button type="button" onclick="openMainAudioFilePicker()" title="파일 연동" class="nb-open"><i class="fa-solid fa-folder-open" style="margin-right:4px;"></i>파일 연동</button>
                         <button type="button" onclick="chooseAudioOpenFolder()" title="음성 파일을 주로 두는 폴더를 따로 지정 (원고 폴더와 별개)" class="nb-folder"><i class="fa-solid fa-folder"></i></button>
                     </div>
@@ -1187,16 +1187,6 @@ body.day-mode header.border-b {
             return !isMobile && !!window[apiName];
         }
 
-        // 폰 등 폴더 기능을 지원하지 않는 브라우저에서는, 눌러도 안 되는 "폴더 지정" 버튼을 아예 숨긴다.
-        function hideUnsupportedFolderButtons() {
-            if (fsAccessAvailable('showDirectoryPicker')) return;
-            document.querySelectorAll('[onclick*="chooseAudioOpenFolder"],[onclick*="chooseDefaultOpenFolder"],[onclick*="chooseChapterDownloadFolder"]').forEach(btn => {
-                btn.style.display = 'none';
-            });
-        }
-        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hideUnsupportedFolderButtons);
-        else hideUnsupportedFolderButtons();
-
         const DEFAULT_PRESET_BOOKS = [
             {
                 id: "preset_samyeong",
@@ -1726,10 +1716,7 @@ body.day-mode header.border-b {
             // 나중에 같은 책을 고르면 자동으로 이 파일들을 다시 불러올 수 있게 한다.
             Promise.all(newItems.map((item, i) =>
                 idbSaveMainAudioFile(item.dbId, startOrder + i, item.name, files[i], currentDraftId)
-            )).then(() => {
-                try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
-                setStatus(`💾 연결한 파일 ${newItems.length}개를 이 기기에 저장했어요. 앱을 다시 열어도 자동으로 불러옵니다.`);
-            }).catch(e => {
+            )).catch(e => {
                 console.warn('재생목록 저장 실패:', e);
                 if (location.protocol === 'file:') {
                     setStatus("⚠️ 재생목록이 저장되지 않았습니다. 이 파일을 더블클릭 등으로 직접 열면(file:// 주소) 브라우저가 저장 기능을 막아요. 새로고침하면 목록이 사라질 수 있습니다.");
@@ -2274,15 +2261,12 @@ body.day-mode header.border-b {
                         ind.textContent = `${localAudioQueue.length}개 파일 연결됨`;
                     }
                     setStatus(`📁 이 책에 연결해둔 음성 파일을 자동으로 불러왔습니다. (${localAudioQueue.length}개 파일)`);
-                    return true;
                 } else {
                     if (ind) ind.classList.add('hidden');
                     renderMainAudioPlaylist();
-                    return false;
                 }
             } catch (e) {
                 console.warn('책 연결 파일 복원 실패:', e);
-                return false;
             }
         }
 
@@ -7837,12 +7821,11 @@ body.day-mode header.border-b {
             }
             // 복원된 책이 서재의 어느 항목인지 찾았다면(currentDraftId) 그 책에 연결된
             // 파일만 불러오고, 못 찾았다면 예전 방식대로 저장된 재생목록 전체를 불러온다.
-            (async () => {
-                let restored = false;
-                if (currentDraftId) restored = await restoreMainAudioQueueForDraft(currentDraftId);
-                // 이 책과 짝지어진 파일이 없더라도, 저장해 둔 재생목록이 있으면 불러온다
-                if (!restored) await restoreMainAudioQueueFromDB();
-            })();
+            if (currentDraftId) {
+                restoreMainAudioQueueForDraft(currentDraftId);
+            } else {
+                restoreMainAudioQueueFromDB();
+            }
             restoreBGMPlaylistFromDB();
             loadBGMSlotLabel('synth');
             loadBGMSlotLabel('rain');
