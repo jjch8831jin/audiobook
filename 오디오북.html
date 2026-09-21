@@ -241,6 +241,17 @@ body.day-mode header.border-b {
 #status-text{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;line-height:1.5;height:4.5em;cursor:pointer;}
 #status-text.status-open{-webkit-line-clamp:unset;line-clamp:unset;height:auto;}
 </style>
+<style id="wide-zoom-style">
+/* 화면 확대창에서 배율을 낮춰 "실제로 보이는 폭"이 넓어지면(기본 700px 이상), 본문과 플레이어를
+   PC 화면처럼 나란히 배치한다. (원래 이 배치는 화면이 1024px 이상일 때만 자동으로 됐는데,
+   앱 안에서 만든 확대는 실제 화면 폭 자체를 바꾸지 못해서 별도로 켜준다.) */
+body.zoom-wide main.grid { grid-template-columns: 7fr 5fr !important; }
+body.zoom-wide main > section { order: 1 !important; }
+body.zoom-wide main > aside {
+    order: 2 !important; position: sticky !important; top: 5rem !important;
+    max-height: calc(100vh - 6rem) !important; overflow-y: auto !important;
+}
+</style>
 </head>
 <body id="app-body" class="bg-stone-900 text-stone-100 min-h-screen flex flex-col font-sans transition-colors duration-500 selection:bg-blue-600 selection:text-white day-mode">
 
@@ -521,7 +532,7 @@ body.day-mode header.border-b {
                 <div class="flex items-center justify-between flex-wrap gap-2 px-0.5">
                     <span class="text-[15px] text-stone-400 font-semibold uppercase tracking-wider whitespace-nowrap"><i class="fa-solid fa-book-open-reader text-amber-400 mr-1.5"></i>문장읽기 컨트롤</span>
                     <div class="flex items-center gap-1.5 shrink-0">
-                        <input type="file" id="main-audio-input" class="hidden" multiple onchange="handleMainAudioUpload(event)">
+                        <input type="file" id="main-audio-input" class="hidden" multiple accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac,.webm" onchange="handleMainAudioUpload(event)">
                         <button type="button" onclick="openMainAudioFilePicker()" title="파일 연동" class="nb-open"><i class="fa-solid fa-folder-open" style="margin-right:4px;"></i>파일 연동</button>
                         <button type="button" onclick="chooseAudioOpenFolder()" title="음성 파일을 주로 두는 폴더를 따로 지정 (원고 폴더와 별개)" class="nb-folder"><i class="fa-solid fa-folder"></i></button>
                     </div>
@@ -5123,6 +5134,14 @@ body.day-mode header.border-b {
             }
         }
 
+        // 확대창의 배율에 맞춰, "실제로 보이는 화면 폭"이 넓으면(기본 700px 이상)
+        // 본문·플레이어를 PC처럼 나란히 배치한다. 배율을 다시 올리면 자동으로 한 줄 배치로 돌아온다.
+        var WIDE_ZOOM_THRESHOLD = 700;
+        function updateWideZoomLayout() {
+            const effectiveWidth = window.innerWidth / (pageZoom || 1);
+            document.body.classList.toggle('zoom-wide', effectiveWidth >= WIDE_ZOOM_THRESHOLD);
+        }
+
         function applyPageZoom(pct, save) {
             pct = Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, pct)) / ZOOM_STEP) * ZOOM_STEP;
             pageZoom = pct / 100;
@@ -5131,6 +5150,7 @@ body.day-mode header.border-b {
             updateZoomPanelUI(pct);
             if (save) { try { localStorage.setItem(ZOOM_KEY, String(pct)); } catch (e) {} }
             // 고정된 요소(제목 카드, 찾기 창 등)의 위치를 새 배율에 맞춰 다시 잡는다
+            updateWideZoomLayout();
             try { updateReaderTitleCardPosition(); } catch (e) {}
             try { positionFindPanel(); } catch (e) {}
             positionZoomPanel();
@@ -5148,7 +5168,7 @@ body.day-mode header.border-b {
             toggleZoomPanel(false);
         });
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleZoomPanel(false); });
-        window.addEventListener('resize', positionZoomPanel);
+        window.addEventListener('resize', () => { updateWideZoomLayout(); positionZoomPanel(); });
         window.addEventListener('scroll', positionZoomPanel, { passive: true });
 
         
