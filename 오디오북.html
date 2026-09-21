@@ -1187,6 +1187,16 @@ body.day-mode header.border-b {
             return !isMobile && !!window[apiName];
         }
 
+        // 폰 등 폴더 기능을 지원하지 않는 브라우저에서는, 눌러도 안 되는 "폴더 지정" 버튼을 아예 숨긴다.
+        function hideUnsupportedFolderButtons() {
+            if (fsAccessAvailable('showDirectoryPicker')) return;
+            document.querySelectorAll('[onclick*="chooseAudioOpenFolder"],[onclick*="chooseDefaultOpenFolder"],[onclick*="chooseChapterDownloadFolder"]').forEach(btn => {
+                btn.style.display = 'none';
+            });
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hideUnsupportedFolderButtons);
+        else hideUnsupportedFolderButtons();
+
         const DEFAULT_PRESET_BOOKS = [
             {
                 id: "preset_samyeong",
