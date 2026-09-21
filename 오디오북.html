@@ -515,8 +515,13 @@ body.day-mode header.border-b {
       <!-- [수정된 전체 컨트롤러 블록] -->
 <div id="sentence-control-card" class="bg-stone-900/60 border border-stone-800/80 rounded-xl p-2.5 space-y-2 shadow">
     <!-- 문장읽기 컨트롤: 이전·재생·일시정지·다음·정지 + 반복·이어듣기를 한 곳(재생 바 바로 아래)에 모았습니다 -->
-                <div class="flex items-center px-0.5">
+                <div class="flex items-center justify-between flex-wrap gap-2 px-0.5">
                     <span class="text-[15px] text-stone-400 font-semibold uppercase tracking-wider whitespace-nowrap"><i class="fa-solid fa-book-open-reader text-amber-400 mr-1.5"></i>문장읽기 컨트롤</span>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <input type="file" id="main-audio-input" class="hidden" multiple onchange="handleMainAudioUpload(event)">
+                        <button type="button" onclick="openMainAudioFilePicker()" title="파일 연동" class="nb-open"><i class="fa-solid fa-folder-open" style="margin-right:4px;"></i>파일 연동</button>
+                        <button type="button" onclick="chooseAudioOpenFolder()" title="음성 파일을 주로 두는 폴더를 따로 지정 (원고 폴더와 별개)" class="nb-folder"><i class="fa-solid fa-folder"></i></button>
+                    </div>
                 </div>
                 <div class="space-y-0.5 px-0.5 relative">
         <input type="range" id="main-audio-seek-slider" min="0" max="100" value="0" step="0.1" oninput="seekMainAudio(this.value)" class="w-full h-1 bg-stone-800 rounded-lg appearance-none cursor-pointer accent-emerald-400" disabled>
@@ -555,15 +560,8 @@ body.day-mode header.border-b {
     </div>
 
     <div id="main-audio-playlist-box" class="space-y-1 bg-stone-950/60 border border-stone-800 rounded-lg p-2">
-        <div class="flex items-center justify-between gap-2">
-                        <span class="text-[15px] text-stone-500 font-semibold uppercase tracking-wider px-0.5">연결된 파일 (<span id="main-audio-playlist-count">0</span>개)</span>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <input type="file" id="main-audio-input" class="hidden" multiple onchange="handleMainAudioUpload(event)">
-                            <button type="button" onclick="openMainAudioFilePicker()" title="파일 연동" class="nb-open"><i class="fa-solid fa-folder-open" style="margin-right:4px;"></i>파일 연동</button>
-                            <button type="button" onclick="chooseAudioOpenFolder()" title="음성 파일을 주로 두는 폴더를 따로 지정 (원고 폴더와 별개)" class="nb-folder"><i class="fa-solid fa-folder"></i></button>
-                        </div>
-                    </div>
-        <div id="main-audio-playlist-list" class="max-h-28 overflow-y-auto space-y-0.5 pr-0.5"><div class="text-[15px] text-stone-500 text-center py-1.5">연결된 파일이 없습니다. '파일 연동' 버튼으로 오디오 파일을 추가해 보세요.</div></div>
+        <span class="text-[15px] text-stone-500 font-semibold uppercase tracking-wider px-0.5">연결된 파일 (<span id="main-audio-playlist-count">0</span>개)</span>
+        <div id="main-audio-playlist-list" class="max-h-28 overflow-y-auto space-y-0.5 pr-0.5"><div class="text-[15px] text-stone-500 text-center py-1.5">연결된 파일이 없습니다. 위의 '파일 연동' 버튼으로 오디오 파일을 추가해 보세요.</div></div>
     </div>
 
     
@@ -1836,7 +1834,7 @@ body.day-mode header.border-b {
             box.classList.remove('hidden');
 
             if (localAudioQueue.length === 0) {
-                list.innerHTML = `<div class="text-[15px] text-stone-500 text-center py-1.5">연결된 파일이 없습니다. '파일 연동' 버튼으로 오디오 파일을 추가해 보세요.</div>`;
+                list.innerHTML = `<div class="text-[15px] text-stone-500 text-center py-1.5">연결된 파일이 없습니다. 위의 '파일 연동' 버튼으로 오디오 파일을 추가해 보세요.</div>`;
                 return;
             }
 
