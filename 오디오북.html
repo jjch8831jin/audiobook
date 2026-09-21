@@ -2432,7 +2432,9 @@ body.day-mode header.border-b {
         // 예전 "문장 이동"(jumpToSentence)은 오디오 재생 위치를 대략 비율로 옮기고 나서 다시
         // 계산해서, 한 문장 위로 강조가 어긋날 수 있었다. 그래서 오디오 위치는 건드리지 않고,
         // 찾은 문장의 화면 위치만 정확히 잡는다.
+        // 이동한 문장에는 [✎ 수정] 버튼이 붙어서, 앞뒤 문맥을 보면서 그 자리에서 바로 고칠 수 있다.
         let findHitIdx = -1;
+        let lastFindQuery = '';
 
         function clearFindHighlight() {
             if (findHitIdx < 0) return;
@@ -2440,8 +2442,11 @@ body.day-mode header.border-b {
             if (wrap) {
                 wrap.style.background = '';
                 wrap.style.boxShadow = '';
-                const span = wrap.firstElementChild;
-                if (span && sentences[findHitIdx] != null) span.textContent = String(sentences[findHitIdx]);
+                wrap.querySelectorAll('[data-find-edit]').forEach(b => b.remove());
+                if (!wrap.getAttribute('data-inline-editing')) {
+                    const span = wrap.firstElementChild;
+                    if (span && sentences[findHitIdx] != null) span.textContent = String(sentences[findHitIdx]);
+                }
             }
             findHitIdx = -1;
         }
@@ -2474,12 +2479,170 @@ body.day-mode header.border-b {
                     span.appendChild(document.createTextNode(text.slice(last)));
                 }
             }
+            // 이동한 자리에서 바로 고칠 수 있는 수정 버튼
+            const eb = document.createElement('button');
+            eb.type = 'button';
+            eb.setAttribute('data-find-edit', '1');
+            eb.textContent = '✎ 수정';
+            eb.style.cssText = 'flex:none; margin-left:8px; padding:6px 12px; background:#0284c7; color:#ffffff; border:1px solid #38bdf8; border-radius:8px; font-size:15px; font-weight:700;';
+            eb.onclick = (e) => { e.stopPropagation(); startInlineEdit(idx); };
+            if (span && span.nextSibling) wrap.insertBefore(eb, span.nextSibling); else wrap.appendChild(eb);
             return wrap;
         }
 
         function findGoToSentence(idx, q) {
+            if (hasUnsavedInlineEdit() && !confirm('수정 중인 문장이 아직 저장되지 않았어요. 버리고 이동할까요?')) return;
+            cancelInlineEdit();
+            lastFindQuery = q || '';
             const wrap = applyFindHighlight(idx, q);
             if (wrap) scrollSentenceToCenter(wrap);
+        }
+
+        // ---- 그 자리에서 바로 수정 ----
+        // 원고 원문에서 각 문장이 있는 위치를 앱이 문장을 나누는 방식(loadBookContent)과 똑같이 계산한다.
+        function getSentenceSpans(text) {
+            const spans = [];
+            const re = /(?<=[.?!])\s+|\n+/g;
+            let last = 0, m;
+            const push = (a, b) => {
+                const t = text.slice(a, b);
+                const lead = t.length - t.trimStart().length;
+                const trail = t.length - t.trimEnd().length;
+                const st = a + lead, en = b - trail;
+                if (en > st) spans.push([st, en]);
+            };
+            while ((m = re.exec(text)) !== null) {
+                push(last, m.index);
+                last = m.index + m[0].length;
+                if (m[0].length === 0) re.lastIndex++;
+            }
+            push(last, text.length);
+            return spans;
+        }
+
+        function hasUnsavedInlineEdit() {
+            const wrap = document.querySelector('[data-inline-editing="1"]');
+            if (!wrap) return false;
+            const ta = wrap.querySelector('textarea');
+            const idx = parseInt(wrap.id.replace('sentence-', ''), 10);
+            return !!ta && String(ta.value).trim() !== String(sentences[idx] || '').trim();
+        }
+
+        function cancelInlineEdit() {
+            const wrap = document.querySelector('[data-inline-editing="1"]');
+            if (!wrap) return;
+            wrap.removeAttribute('data-inline-editing');
+            wrap.innerHTML = '';
+            (wrap._backupNodes || []).forEach(n => wrap.appendChild(n));
+            wrap._backupNodes = null;
+        }
+
+        function startInlineEdit(idx) {
+            cancelInlineEdit();
+            const wrap = document.getElementById('sentence-' + idx);
+            if (!wrap) return;
+            wrap._backupNodes = Array.from(wrap.childNodes);
+            wrap.setAttribute('data-inline-editing', '1');
+            wrap.innerHTML = '';
+
+            const box = document.createElement('div');
+            box.style.cssText = 'width:100%; display:flex; flex-direction:column; gap:8px;';
+
+            const label = document.createElement('div');
+            label.textContent = `${idx + 1}번 문장 수정 — 위·아래 문장을 보면서 고치세요`;
+            label.style.cssText = 'font-size:14px; font-weight:700; color:#bae6fd;';
+
+            const ta = document.createElement('textarea');
+            ta.value = String(sentences[idx]);
+            ta.style.cssText = 'width:100%; box-sizing:border-box; background:#ffffff; color:#1c1917; border:2px solid #38bdf8; border-radius:10px; padding:10px; font-size:17px; line-height:1.6; min-height:96px; resize:vertical;';
+            const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(96, ta.scrollHeight + 4) + 'px'; };
+            ta.addEventListener('input', grow);
+            ta.addEventListener('keydown', (e) => {
+                e.stopPropagation();
+                if (e.key === 'Escape') { e.preventDefault(); cancelInlineEdit(); }
+                else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveInlineEdit(idx, false); }
+            });
+
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end;';
+            const mk = (label, css, fn) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = label;
+                b.style.cssText = 'padding:7px 14px; border-radius:8px; font-size:15px; font-weight:700; ' + css;
+                b.onclick = (e) => { e.stopPropagation(); fn(); };
+                return b;
+            };
+            row.appendChild(mk('취소', 'background:#f5f5f4; color:#44403c; border:1px solid #d6d3d1;', cancelInlineEdit));
+            row.appendChild(mk('저장하고 이 문장만 다시 만들기', 'background:#0284c7; color:#ffffff; border:1px solid #0369a1;', () => saveInlineEdit(idx, true)));
+            row.appendChild(mk('저장', 'background:#059669; color:#ffffff; border:1px solid #047857;', () => saveInlineEdit(idx, false)));
+
+            box.appendChild(label);
+            box.appendChild(ta);
+            box.appendChild(row);
+            wrap.appendChild(box);
+            grow();
+            try { ta.focus({ preventScroll: true }); } catch (e) { ta.focus(); }
+        }
+
+        function saveInlineEdit(idx, regen) {
+            const wrap = document.getElementById('sentence-' + idx);
+            const ta = wrap && wrap.querySelector('textarea');
+            if (!ta) return;
+            const edited = String(ta.value).replace(/\r\n/g, '\n').trim();
+            if (!edited) { setStatus('⚠️ 문장이 비어 있으면 저장할 수 없어요.'); return; }
+            if (edited === String(sentences[idx]).trim()) { cancelInlineEdit(); setStatus('바뀐 내용이 없어요.'); return; }
+
+            const text = window.__currentBookText;
+            if (typeof text !== 'string') { setStatus('⚠️ 원고 원문을 찾지 못해 저장할 수 없어요. 원고를 다시 불러온 뒤 시도해 주세요.'); return; }
+            const spans = getSentenceSpans(text);
+            if (spans.length !== sentences.length || !spans[idx] || text.slice(spans[idx][0], spans[idx][1]) !== sentences[idx]) {
+                setStatus('⚠️ 문장 위치가 원고와 맞지 않아 저장하지 않았어요. 원고를 다시 불러온 뒤 시도해 주세요.');
+                return;
+            }
+            const newFull = text.slice(0, spans[idx][0]) + edited + text.slice(spans[idx][1]);
+
+            const titleEl = document.getElementById('current-book-title');
+            let title = titleEl ? titleEl.textContent : '';
+            let persisted = false;
+            if (currentDraftId) {
+                const drafts = getSavedCustomDrafts();
+                const di = drafts.findIndex(d => d.id === currentDraftId);
+                if (di >= 0 && String(drafts[di].text).trim() === text.trim()) {
+                    drafts[di] = { ...drafts[di], text: newFull };
+                    try {
+                        localStorage.setItem('audiobook_custom_drafts', JSON.stringify(drafts));
+                        persisted = true;
+                        title = drafts[di].title || title;
+                    } catch (e) {
+                        setStatus('⚠️ 저장하지 못했어요. 브라우저 저장 공간이 막혀 있거나 가득 찼을 수 있어요.');
+                        return;
+                    }
+                }
+            }
+
+            const beforeCount = sentences.length;
+            wrap.removeAttribute('data-inline-editing');
+            wrap._backupNodes = null;
+            currentIndex = idx;
+            loadBookContent(title, newFull, false, !persisted && !!originalBeforeStyleTransform, true);
+            if (persisted && typeof renderCustomDraftList === 'function') renderCustomDraftList();
+
+            findHitIdx = -1;
+            applyFindHighlight(idx, lastFindQuery);
+
+            let msg = persisted
+                ? `✏️ ${idx + 1}번 문장을 고쳐서 원고에 저장했어요.`
+                : `✏️ ${idx + 1}번 문장을 고쳤어요. (서재의 원고에는 저장되지 않은 화면이라, 다시 불러오면 원래대로 돌아가요.)`;
+            if (regen) {
+                if (sentences.length === beforeCount) {
+                    setFinderRange(idx + 1, 'both');
+                    msg += ' 이 문장만 다시 만들 범위로 지정했으니 챕터생성을 누르세요.';
+                } else {
+                    msg += ' 문장 수가 달라져서 범위는 지정하지 않았어요. 찾기로 다시 골라 주세요.';
+                }
+            }
+            setStatus(msg);
         }
 
         function runSentenceFinder() {
@@ -4370,6 +4533,7 @@ body.day-mode header.border-b {
             sentences = rawSentences.length > 0 ? rawSentences : [text.trim() || "내용이 없습니다."];
 
             currentBookId = computeBookId(title, text);
+            window.__currentBookText = text;
             currentIndex = 0;
             renderSentences();
             updateProgressUI();
@@ -4581,6 +4745,7 @@ body.day-mode header.border-b {
             sentences = rawSentences.length > 0 ? rawSentences : [text.trim() || "내용이 없습니다."];
 
             currentBookId = computeBookId(title, text);
+            window.__currentBookText = text;
             currentChapterIndex = 0;
             renderSentences();
             updateProgressUI();
