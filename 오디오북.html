@@ -3,6 +3,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>감성 오디오북 플레이어 &amp; AI 문학 라운지</title>
+    <meta name="theme-color" content="#1c1917">
+    <link rel="manifest" href="audiobook-manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="audiobook-favicon-32.png">
+    <link rel="apple-touch-icon" href="audiobook-apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="오디오북">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- docx 텍스트 파싱을 위한 Mammoth.js -->
@@ -280,6 +288,23 @@ body.day-mode header.border-b {
                 <button onclick="jumpToSentence(0)" title="본문 맨 처음(첫 문장)으로 바로 이동" class="shrink-0 px-2.5 py-1 rounded-lg text-[15px] font-bold bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 active:scale-95 transition flex items-center space-x-1">
                     <i class="fa-solid fa-arrow-up text-[15px]"></i>
                 </button>
+                <button type="button" id="btn-find-toggle" onclick="toggleFindPanel()" title="본문에서 단어·문장 찾기" class="shrink-0 px-2.5 py-1 rounded-lg text-[15px] font-bold bg-stone-800 hover:bg-stone-700 text-sky-300 border border-stone-700 active:scale-95 transition flex items-center space-x-1">
+                    <i class="fa-solid fa-magnifying-glass text-[15px]"></i>
+                </button>
+            </div>
+
+            <div id="find-panel" class="hidden" style="background:#ffffff; border:1px solid #d6d3d1; border-radius:16px; padding:10px; box-shadow:0 2px 8px rgba(0,0,0,0.25);">
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <input type="text" id="finder-query" placeholder="찾을 단어나 문장을 입력" onkeydown="if(event.key==='Enter'){event.preventDefault();runSentenceFinder();}" style="flex:1; min-width:0; background:#ffffff; border:1px solid #a8a29e; border-radius:8px; padding:6px 8px; font-size:16px; color:#1c1917;">
+                    <button type="button" onclick="runSentenceFinder()" style="flex:none; padding:6px 14px; background:#059669; color:#ffffff; border:1px solid #047857; border-radius:8px; font-size:15px; font-weight:700;">찾기</button>
+                    <button type="button" onclick="toggleFindPanel(false)" title="닫기" style="flex:none; padding:6px 10px; background:#f5f5f4; color:#44403c; border:1px solid #d6d3d1; border-radius:8px; font-size:15px;">✕</button>
+                </div>
+                <div id="finder-status" style="font-size:14px; color:#57534e; margin-top:6px;"></div>
+                <div id="finder-results" style="max-height:220px; overflow-y:auto; margin-top:6px; display:flex; flex-direction:column; gap:4px;"></div>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+                    <div id="finder-selected" style="flex:1; font-size:14px; color:#b45309; font-weight:600;"></div>
+                    <button type="button" id="finder-clear-btn" onclick="clearFinderRange()" style="display:none; flex:none; padding:3px 8px; background:#f5f5f4; color:#44403c; border:1px solid #d6d3d1; border-radius:6px; font-size:13px;">범위 지우기</button>
+                </div>
             </div>
 
             <div id="book-queue-box" class="hidden bg-stone-800/40 border border-stone-800 rounded-2xl p-3 space-y-1.5">
@@ -300,21 +325,11 @@ body.day-mode header.border-b {
                     <button id="reader-fullscreen-stop-btn" onclick="fullscreenStop()" title="멈춤 (처음으로)" class="items-center justify-center w-10 h-10 rounded-full bg-stone-800 hover:bg-rose-500 hover:text-stone-900 text-rose-300 border border-stone-700 shadow-lg active:scale-90 transition">
                     <i class="fa-solid fa-stop text-lg"></i>
                 </button>
-                    <div class="flex items-center bg-stone-900 border border-amber-500 rounded-xl h-10 px-1.5 space-x-1" title="속도 조절">
-                        <button onclick="adjustRate(-0.01)" title="속도 느리게" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">-</button>
-                        <span id="rate-display-fs" class="font-mono font-bold text-base w-10 text-center text-white">1.00x</span>
-                        <button onclick="adjustRate(0.01)" title="속도 빠르게" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
-                    </div>
-                    <div class="flex items-center bg-stone-900 rounded-xl h-10 px-1.5 space-x-1" style="border: 1px solid #a78bfa;" title="음성 톤 (음높이)">
-                        <button onclick="adjustPitch(-0.1)" title="음높이 낮게" class="w-7 h-7 rounded-md font-extrabold text-base text-black active:scale-95 shadow flex items-center justify-center" style="background-color: #8b5cf6;">-</button>
-                        <span id="pitch-display-fs" class="font-mono font-bold text-base w-10 text-center text-white">1.0</span>
-                        <button onclick="adjustPitch(0.1)" title="음높이 높게" class="w-7 h-7 rounded-md font-extrabold text-base text-black active:scale-95 shadow flex items-center justify-center" style="background-color: #8b5cf6;">+</button>
-                    </div>
                     <div id="reader-fullscreen-font-controls" class="flex-row items-center bg-stone-800 border border-stone-700 rounded-full shadow-lg overflow-hidden">
                     <button onclick="adjustFullscreenFontSize(-1)" title="글자 작게" class="w-10 h-10 flex items-center justify-center hover:bg-amber-500 hover:text-stone-900 text-stone-300 active:scale-90 transition text-[16px]">
                         <i class="fa-solid fa-minus"></i>
                     </button>
-                    <span id="reader-fullscreen-font-size-label" onclick="promptFullscreenFontSize()" title="숫자를 눌러 직접 입력" class="px-1.5 text-[17px] text-stone-300 font-mono font-bold select-none cursor-pointer hover:text-amber-300 hover:underline">18pt</span>
+                    <span id="reader-fullscreen-font-size-label" onclick="promptFullscreenFontSize()" title="숫자를 눌러 직접 입력" class="px-1.5 text-[14px] text-stone-300 font-mono select-none cursor-pointer hover:text-amber-300 hover:underline">18pt</span>
                     <button onclick="adjustFullscreenFontSize(1)" title="글자 크게" class="w-10 h-10 flex items-center justify-center hover:bg-amber-500 hover:text-stone-900 text-stone-300 active:scale-90 transition text-[16px]">
                         <i class="fa-solid fa-plus"></i>
                     </button>
@@ -368,7 +383,7 @@ body.day-mode header.border-b {
                         <span class="text-[15px] text-amber-400 font-bold mb-1">속도 조절</span>
                         <div class="flex items-center space-x-1 text-[15px]">
                             <button onclick="adjustRate(-0.01)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">-</button>
-                            <span id="rate-display" class="font-mono font-bold text-base w-10 text-center text-white">1.00x</span>
+                            <span id="rate-display" class="font-mono font-bold text-base w-10 text-center text-white">0.95x</span>
                             <button onclick="adjustRate(0.01)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
                         </div>
                     </div>
@@ -469,46 +484,35 @@ body.day-mode header.border-b {
 
       <!-- [수정된 전체 컨트롤러 블록] -->
 <div class="bg-stone-900/60 border border-stone-800/80 rounded-xl p-2.5 space-y-2 shadow">
-    <div class="flex items-center justify-start gap-3 px-0.5">
+    <div class="flex items-center justify-between px-0.5">
         <span class="text-[15px] text-stone-400 font-semibold uppercase tracking-wider flex flex-col leading-tight">
             <span class="whitespace-nowrap"><i class="fa-solid fa-book-open-reader text-amber-400 mr-1.5"></i>문장읽기</span>
             <span class="pl-[1.35rem] whitespace-nowrap">컨트롤</span>
         </span>
-        <div class="flex items-center space-x-1">
+        <div class="flex items-center space-x-1.5">
             <!-- 1. 파일 연동 버튼 -->
             <input type="file" id="main-audio-input" class="hidden" multiple="" onchange="handleMainAudioUpload(event)">
-            <button onclick="openMainAudioFilePicker()" title="파일 연동" class="w-12 h-12 shrink-0 text-emerald-300 hover:text-emerald-200 text-[12px] border border-emerald-500/50 bg-emerald-500/20 rounded-lg font-bold transition active:scale-95 flex flex-col items-center justify-center gap-0.5 shadow-sm">
-                <i class="fa-solid fa-folder-open text-[13px]"></i>
-                <span class="whitespace-nowrap">연동</span>
+            <button onclick="openMainAudioFilePicker()" title="파일 연동" class="text-emerald-300 hover:text-emerald-200 text-[15px] px-2 py-0.5 border border-emerald-500/50 bg-emerald-500/20 rounded font-bold transition active:scale-95 flex items-center shadow-sm">
+                <i class="fa-solid fa-folder-open mr-1"></i>
+                <span class="flex flex-col leading-tight items-start">
+                    <span class="whitespace-nowrap">파일</span>
+                    <span class="whitespace-nowrap">연동</span>
+                </span>
             </button>
-            <button onclick="chooseAudioOpenFolder()" title="음성 파일을 주로 두는 폴더를 따로 지정 (원고 폴더와 별개)" class="w-12 h-12 shrink-0 text-stone-400 hover:text-emerald-300 text-[12px] border border-stone-700 bg-stone-800 hover:bg-stone-700 rounded-lg font-bold transition active:scale-95 flex flex-col items-center justify-center gap-0.5">
-                <i class="fa-solid fa-folder text-[13px]"></i>
-                <span class="whitespace-nowrap">폴더</span>
+            <button onclick="chooseAudioOpenFolder()" title="음성 파일을 주로 두는 폴더를 따로 지정 (원고 폴더와 별개)" class="text-stone-400 hover:text-emerald-300 text-[15px] px-1.5 py-1 border border-stone-700 bg-stone-800 hover:bg-stone-700 rounded transition active:scale-95 flex items-center">
+                <i class="fa-solid fa-folder text-[15px]"></i>
             </button>
-            <!-- 2. 속도/높이 조절 (반복재생 자리에 새로 넣음) — 누르면 숫자를 직접 입력할 수 있음 -->
-            <div class="flex flex-col items-center shrink-0 bg-amber-500/10 border border-amber-500/40 rounded-lg h-12 justify-center px-0.5">
-                <span id="rate-display-mini" class="font-mono text-[11px] text-amber-300 font-bold leading-none mb-0.5">1.00x</span>
-                <div class="flex items-center space-x-0.5">
-                    <button onclick="adjustRate(-0.01)" title="속도 느리게" class="w-4 h-4 bg-amber-500 rounded text-black text-[11px] font-extrabold flex items-center justify-center hover:bg-amber-400 active:scale-95">-</button>
-                    <button onclick="adjustRate(0.01)" title="속도 빠르게" class="w-4 h-4 bg-amber-500 rounded text-black text-[11px] font-extrabold flex items-center justify-center hover:bg-amber-400 active:scale-95">+</button>
-                </div>
-            </div>
-            <div class="flex flex-col items-center shrink-0 bg-sky-500/10 border border-sky-500/40 rounded-lg h-12 justify-center px-0.5">
-                <span id="pitch-display-mini" class="font-mono text-[11px] text-sky-300 font-bold leading-none mb-0.5">1.0</span>
-                <div class="flex items-center space-x-0.5">
-                    <button onclick="adjustPitch(-0.1)" title="음높이 낮게" class="w-4 h-4 bg-sky-500 rounded text-black text-[11px] font-extrabold flex items-center justify-center hover:bg-sky-400 active:scale-95">-</button>
-                    <button onclick="adjustPitch(0.1)" title="음높이 높게" class="w-4 h-4 bg-sky-500 rounded text-black text-[11px] font-extrabold flex items-center justify-center hover:bg-sky-400 active:scale-95">+</button>
-                </div>
-            </div>
+            <!-- 2. 반복재생 버튼 -->
+            <button onclick="toggleAutoReplay()" id="btn-auto-replay" title="반복재생" class="text-amber-300 hover:text-amber-200 text-[15px] px-2 py-0.5 border border-amber-500/50 bg-amber-500/20 rounded font-bold transition active:scale-95 flex items-center justify-center shadow-sm w-[108px] shrink-0">
+                <i class="fa-solid fa-rotate-right mr-1"></i><span id="auto-replay-label" class="whitespace-nowrap">반복 꺼짐</span>
+            </button>
             <!-- 3. 다음 문장 버튼 -->
-            <button onclick="playNextSentence()" title="다음 문장" class="w-12 h-12 shrink-0 text-sky-300 hover:text-sky-200 text-[12px] border border-sky-500/40 bg-sky-500/15 rounded-lg font-bold transition active:scale-95 flex flex-col items-center justify-center gap-0.5">
-                <i class="fa-solid fa-forward-step text-[13px]"></i>
-                <span>다음</span>
+            <button onclick="playNextSentence()" title="다음 문장" class="text-sky-300 hover:text-sky-200 text-[15px] px-2 py-0.5 border border-sky-500/40 bg-sky-500/15 rounded font-bold transition active:scale-95 flex items-center">
+                <i class="fa-solid fa-forward-step mr-1"></i>다음
             </button>
             <!-- 4. 이전 문장 버튼 -->
-            <button onclick="playPrevSentence()" title="이전 문장" class="w-12 h-12 shrink-0 text-violet-300 hover:text-violet-200 text-[12px] border border-violet-500/40 bg-violet-500/15 rounded-lg font-bold transition active:scale-95 flex flex-col items-center justify-center gap-0.5">
-                <i class="fa-solid fa-backward-step text-[13px]"></i>
-                <span>이전</span>
+            <button onclick="playPrevSentence()" title="이전 문장" class="text-violet-300 hover:text-violet-200 text-[15px] px-2 py-0.5 border border-violet-500/40 bg-violet-500/15 rounded font-bold transition active:scale-95 flex items-center">
+                <i class="fa-solid fa-backward-step mr-1"></i>이전
             </button>
         </div>
     </div>
@@ -545,7 +549,7 @@ body.day-mode header.border-b {
     </div>
 
     <!-- 재생 제어 버튼들 (복구됨) -->
-    <div class="grid grid-cols-5 gap-1.5">
+    <div class="grid grid-cols-4 gap-1.5">
         <button onclick="resumeOrPlayTTS()" id="btn-play-tts" title="재생" class="py-2 px-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-lg text-[15px] font-bold transition flex items-center justify-center space-x-1 active:scale-95 shadow"><i class="fa-solid fa-play"></i><span>재생</span></button>
         <button onclick="pauseTTS()" title="일시정지" class="py-2 px-1 bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 rounded-lg text-[15px] font-bold transition flex items-center justify-center space-x-1 active:scale-95 shadow">
             <i class="fa-solid fa-pause"></i><span>일시정지</span>
@@ -555,9 +559,6 @@ body.day-mode header.border-b {
         </button>
         <button onclick="resumeReadingProgress()" id="btn-continuous-play" title="이어듣기" class="py-2 px-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[15px] font-bold transition flex items-center justify-center space-x-1 active:scale-95 shadow">
             <i class="fa-solid fa-forward-fast"></i><span id="continuous-play-label">이어듣기</span>
-        </button>
-        <button onclick="toggleAutoReplay()" id="btn-auto-replay" title="반복재생" class="py-2 px-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[15px] font-bold transition flex items-center justify-center space-x-1 active:scale-95 shadow">
-            <i class="fa-solid fa-rotate-right"></i><span id="auto-replay-label">반복 꺼짐</span>
         </button>
     </div>
 </div>
@@ -1243,17 +1244,17 @@ body.day-mode header.border-b {
         ];
 
         const AI_VOICE_PRESETS = [
-            { id: "Orus", gender: "male", name: "Orus", title: "Orus (남성 · 단정하고 선비 같은 맑은 저음 ★)", pitch: 1.0, rate: 1.0, tone: "solemn", voiceName: "Orus" },
-            { id: "Puck", gender: "male", name: "Puck", title: "Puck (남성 · 밝고 편안한 청년 이야기)", pitch: 1.0, rate: 1.0, tone: "warm", voiceName: "Puck" },
-            { id: "Charon", gender: "male", name: "Charon", title: "Charon (남성 · 중후하고 깊은 강론 톤)", pitch: 1.0, rate: 1.0, tone: "solemn", voiceName: "Charon" },
-            { id: "Sadaltager", gender: "male", name: "Sadaltager", title: "Sadaltager (남성 · 지혜로운 원로/경전)", pitch: 1.0, rate: 1.0, tone: "solemn", voiceName: "Sadaltager" },
-            { id: "Fenrir", gender: "male", name: "Fenrir", title: "Fenrir (남성 · 열정적이고 힘 있는 웅변)", pitch: 1.0, rate: 1.0, tone: "dramatic", voiceName: "Fenrir" },
-            { id: "Enceladus", gender: "male", name: "Enceladus", title: "Enceladus (남성 · 잔잔하고 고요한 힐링)", pitch: 1.0, rate: 1.0, tone: "calm", voiceName: "Enceladus" },
+            { id: "Orus", gender: "male", name: "Orus", title: "Orus (남성 · 단정하고 선비 같은 맑은 저음 ★)", pitch: 1.0, rate: 0.95, tone: "solemn", voiceName: "Orus" },
+            { id: "Puck", gender: "male", name: "Puck", title: "Puck (남성 · 밝고 편안한 청년 이야기)", pitch: 1.0, rate: 0.95, tone: "warm", voiceName: "Puck" },
+            { id: "Charon", gender: "male", name: "Charon", title: "Charon (남성 · 중후하고 깊은 강론 톤)", pitch: 1.0, rate: 0.95, tone: "solemn", voiceName: "Charon" },
+            { id: "Sadaltager", gender: "male", name: "Sadaltager", title: "Sadaltager (남성 · 지혜로운 원로/경전)", pitch: 1.0, rate: 0.95, tone: "solemn", voiceName: "Sadaltager" },
+            { id: "Fenrir", gender: "male", name: "Fenrir", title: "Fenrir (남성 · 열정적이고 힘 있는 웅변)", pitch: 1.0, rate: 0.95, tone: "dramatic", voiceName: "Fenrir" },
+            { id: "Enceladus", gender: "male", name: "Enceladus", title: "Enceladus (남성 · 잔잔하고 고요한 힐링)", pitch: 1.0, rate: 0.95, tone: "calm", voiceName: "Enceladus" },
 
-            { id: "Aoede", gender: "female", name: "Aoede", title: "Aoede (여성 · 따뜻하고 감성적인 서재 낭독 ★)", pitch: 1.0, rate: 1.0, tone: "warm", voiceName: "Aoede" },
-            { id: "Kore", gender: "female", name: "Kore", title: "Kore (여성 · 맑고 또렷한 전문 아나운서)", pitch: 1.0, rate: 1.0, tone: "calm", voiceName: "Kore" },
-            { id: "Callirrhoe", gender: "female", name: "Callirrhoe", title: "Callirrhoe (여성 · 차분하고 지적인 평론가)", pitch: 1.0, rate: 1.0, tone: "solemn", voiceName: "Callirrhoe" },
-            { id: "Leda", gender: "female", name: "Leda", title: "Leda (여성 · 상큼하고 다정한 동화 구연)", pitch: 1.0, rate: 1.0, tone: "warm", voiceName: "Leda" }
+            { id: "Aoede", gender: "female", name: "Aoede", title: "Aoede (여성 · 따뜻하고 감성적인 서재 낭독 ★)", pitch: 1.0, rate: 0.95, tone: "warm", voiceName: "Aoede" },
+            { id: "Kore", gender: "female", name: "Kore", title: "Kore (여성 · 맑고 또렷한 전문 아나운서)", pitch: 1.0, rate: 0.95, tone: "calm", voiceName: "Kore" },
+            { id: "Callirrhoe", gender: "female", name: "Callirrhoe", title: "Callirrhoe (여성 · 차분하고 지적인 평론가)", pitch: 1.0, rate: 0.95, tone: "solemn", voiceName: "Callirrhoe" },
+            { id: "Leda", gender: "female", name: "Leda", title: "Leda (여성 · 상큼하고 다정한 동화 구연)", pitch: 1.0, rate: 0.95, tone: "warm", voiceName: "Leda" }
         ];
 
         let sentences = [];
@@ -2332,6 +2333,7 @@ body.day-mode header.border-b {
             customRangeEnabled = checked;
             const box = document.getElementById('custom-range-inputs');
             if (box) box.classList.toggle('hidden', !checked);
+            updateFinderSelected();
             if (checked) {
                 const s = document.getElementById('custom-range-start');
                 const e = document.getElementById('custom-range-end');
@@ -2340,9 +2342,230 @@ body.day-mode header.border-b {
             }
             resetGeneratedAudiobook();
         }
+        // ---- 본문 찾기 (제목줄 돋보기) ----
+        // 단어·문장을 찾아 본문으로 이동하거나, 오타를 고쳐 다시 만들 범위로 고른다.
+        // 찾기 창은 "지금 보고 있는 화면"에 그대로 떠서 열린다 (제목줄 바로 아래, 화면 고정).
+        // 그래서 열고 닫아도 읽던 위치가 위로 튀지 않는다.
+        function positionFindPanel() {
+            const panel = document.getElementById('find-panel');
+            if (!panel || panel.classList.contains('hidden')) return;
+            const card = document.getElementById('reader-title-card');
+            let r = card ? card.getBoundingClientRect() : null;
+            if (!r || r.width < 50) r = { bottom: 56, left: 8, width: window.innerWidth - 16 };
+            const top = Math.max(8, r.bottom + 6);
+            panel.style.position = 'fixed';
+            panel.style.top = top + 'px';
+            panel.style.left = r.left + 'px';
+            panel.style.width = r.width + 'px';
+            panel.style.zIndex = '60';
+            panel.style.boxSizing = 'border-box';
+            panel.style.maxHeight = Math.max(160, window.innerHeight - top - 12) + 'px';
+            panel.style.overflowY = 'auto';
+        }
+        window.addEventListener('scroll', positionFindPanel, { passive: true });
+        window.addEventListener('resize', positionFindPanel);
+
+        function toggleFindPanel(force) {
+            const panel = document.getElementById('find-panel');
+            if (!panel) return;
+            const open = (typeof force === 'boolean') ? force : panel.classList.contains('hidden');
+            panel.classList.toggle('hidden', !open);
+            if (open) {
+                positionFindPanel();
+                const q = document.getElementById('finder-query');
+                if (q) {
+                    try { q.focus({ preventScroll: true }); } catch (e) { q.focus(); }
+                    if (q.select) q.select();
+                }
+            }
+        }
+
+        function ensureCustomRangeOn() {
+            const cb = document.getElementById('custom-range-toggle');
+            if (cb && !cb.checked) { cb.checked = true; toggleCustomRange(true); }
+        }
+
+        function clearFinderRange() {
+            const cb = document.getElementById('custom-range-toggle');
+            if (cb && cb.checked) { cb.checked = false; toggleCustomRange(false); }
+            updateFinderSelected();
+        }
+
+        function updateFinderSelected() {
+            const out = document.getElementById('finder-selected');
+            const clearBtn = document.getElementById('finder-clear-btn');
+            if (!out) return;
+            const sEl = document.getElementById('custom-range-start');
+            const eEl = document.getElementById('custom-range-end');
+            const sv = parseInt(sEl && sEl.value, 10);
+            const ev = parseInt(eEl && eEl.value, 10);
+            if (!customRangeEnabled || isNaN(sv) || isNaN(ev) || ev < sv) {
+                out.textContent = '';
+                if (clearBtn) clearBtn.style.display = 'none';
+                return;
+            }
+            out.textContent = `다시 만들 범위: ${sv}번 ~ ${ev}번 문장 (${ev - sv + 1}문장) — 챕터생성을 누르면 이 부분만 만들어요`;
+            if (clearBtn) clearBtn.style.display = 'block';
+        }
+
         function onCustomRangeChange() {
             resetGeneratedAudiobook();
+            updateFinderSelected();
         }
+
+        function setFinderRange(n, which) {
+            ensureCustomRangeOn();
+            const sEl = document.getElementById('custom-range-start');
+            const eEl = document.getElementById('custom-range-end');
+            if (!sEl || !eEl) return;
+            let sv = parseInt(sEl.value, 10);
+            let ev = parseInt(eEl.value, 10);
+            if (which === 'both') { sv = n; ev = n; }
+            else if (which === 'start') { sv = n; if (isNaN(ev) || ev < n) ev = n; }
+            else if (which === 'end') { ev = n; if (isNaN(sv) || sv > n) sv = n; }
+            sEl.value = sv;
+            eEl.value = ev;
+            onCustomRangeChange();
+        }
+
+        // ---- 찾은 문장으로 이동: 정확히 그 문장(줄)을 파란색으로 표시하고 그 자리로 화면을 옮긴다 ----
+        // 예전 "문장 이동"(jumpToSentence)은 오디오 재생 위치를 대략 비율로 옮기고 나서 다시
+        // 계산해서, 한 문장 위로 강조가 어긋날 수 있었다. 그래서 오디오 위치는 건드리지 않고,
+        // 찾은 문장의 화면 위치만 정확히 잡는다.
+        let findHitIdx = -1;
+
+        function clearFindHighlight() {
+            if (findHitIdx < 0) return;
+            const wrap = document.getElementById('sentence-' + findHitIdx);
+            if (wrap) {
+                wrap.style.background = '';
+                wrap.style.boxShadow = '';
+                const span = wrap.firstElementChild;
+                if (span && sentences[findHitIdx] != null) span.textContent = String(sentences[findHitIdx]);
+            }
+            findHitIdx = -1;
+        }
+
+        function applyFindHighlight(idx, q) {
+            clearFindHighlight();
+            const wrap = document.getElementById('sentence-' + idx);
+            if (!wrap) return null;
+            findHitIdx = idx;
+            wrap.style.background = 'rgba(56,189,248,0.22)';
+            wrap.style.boxShadow = 'inset 0 0 0 2px #38bdf8';
+            const span = wrap.firstElementChild;
+            const text = String(sentences[idx]);
+            if (span && q) {
+                const lower = text.toLowerCase();
+                const lq = q.toLowerCase();
+                let pos = lower.indexOf(lq);
+                if (pos >= 0) {
+                    span.textContent = '';
+                    let last = 0;
+                    while (pos >= 0) {
+                        span.appendChild(document.createTextNode(text.slice(last, pos)));
+                        const m = document.createElement('span');
+                        m.textContent = text.slice(pos, pos + q.length);
+                        m.style.cssText = 'background:#0284c7; color:#ffffff; border-radius:4px; padding:0 3px; font-weight:700;';
+                        span.appendChild(m);
+                        last = pos + q.length;
+                        pos = lower.indexOf(lq, last);
+                    }
+                    span.appendChild(document.createTextNode(text.slice(last)));
+                }
+            }
+            return wrap;
+        }
+
+        function findGoToSentence(idx, q) {
+            const wrap = applyFindHighlight(idx, q);
+            if (wrap) scrollSentenceToCenter(wrap);
+        }
+
+        function runSentenceFinder() {
+            const qEl = document.getElementById('finder-query');
+            const status = document.getElementById('finder-status');
+            const list = document.getElementById('finder-results');
+            if (!qEl || !status || !list) return;
+            list.innerHTML = '';
+            const q = (qEl.value || '').trim();
+            if (!q) { status.textContent = '찾을 단어나 문장을 입력해 주세요.'; return; }
+            if (!sentences || sentences.length === 0) { status.textContent = '먼저 원고를 불러와 주세요.'; return; }
+
+            // 띄어쓰기와 대소문자는 무시하고 찾는다
+            const norm = (t) => String(t).replace(/\s+/g, '').toLowerCase();
+            const nq = norm(q);
+            const hits = [];
+            sentences.forEach((t, i) => { if (norm(t).includes(nq)) hits.push(i); });
+
+            if (hits.length === 0) { status.textContent = `"${q}"이(가) 들어간 문장을 찾지 못했어요.`; return; }
+            const MAX_SHOW = 50;
+            status.textContent = hits.length > MAX_SHOW
+                ? `${hits.length}개 문장을 찾았어요 (앞의 ${MAX_SHOW}개만 표시 — 더 정확한 말로 다시 찾아보세요)`
+                : `${hits.length}개 문장을 찾았어요. 문장이나 [이동]을 누르면 본문의 그 문장으로 이동해요.`;
+
+            const goTo = (idx) => { findGoToSentence(idx, q); toggleFindPanel(false); };
+
+            hits.slice(0, MAX_SHOW).forEach((idx) => {
+                const text = String(sentences[idx]);
+                const n = idx + 1;
+                const row = document.createElement('div');
+                row.style.cssText = 'padding:8px; background:#fafaf9; border:1px solid #d6d3d1; border-radius:8px;';
+
+                const top = document.createElement('div');
+                top.style.cssText = 'display:flex; align-items:flex-start; gap:6px; cursor:pointer;';
+                top.onclick = () => goTo(idx);
+
+                const badge = document.createElement('span');
+                badge.textContent = `${n}번`;
+                badge.style.cssText = 'flex:none; color:#b45309; font-weight:700; font-size:14px; min-width:44px;';
+
+                const body = document.createElement('span');
+                body.style.cssText = 'flex:1; min-width:0; font-size:16px; color:#1c1917; line-height:1.5; word-break:break-all;';
+                const p = text.toLowerCase().indexOf(q.toLowerCase());
+                if (p >= 0) {
+                    const from = Math.max(0, p - 25);
+                    const to = Math.min(text.length, p + q.length + 40);
+                    body.appendChild(document.createTextNode((from > 0 ? '…' : '') + text.slice(from, p)));
+                    const mark = document.createElement('span');
+                    mark.textContent = text.slice(p, p + q.length);
+                    mark.style.cssText = 'background:#bae6fd; color:#0c4a6e; border-radius:3px; padding:0 2px; font-weight:700;';
+                    body.appendChild(mark);
+                    body.appendChild(document.createTextNode(text.slice(p + q.length, to) + (to < text.length ? '…' : '')));
+                } else {
+                    body.textContent = text.length > 80 ? text.slice(0, 80) + '…' : text;
+                }
+                body.title = '누르면 본문의 이 문장으로 이동';
+
+                top.appendChild(badge);
+                top.appendChild(body);
+
+                const btns = document.createElement('div');
+                btns.style.cssText = 'display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; margin-top:6px;';
+                const styles = {
+                    go: 'background:#0284c7; color:#ffffff; border:1px solid #0369a1;',
+                    redo: 'background:#d1fae5; color:#065f46; border:1px solid #6ee7b7;',
+                    plain: 'background:#f5f5f4; color:#44403c; border:1px solid #d6d3d1;'
+                };
+                const mk = (label, kind, fn) => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.textContent = label;
+                    b.style.cssText = 'padding:4px 10px; border-radius:6px; font-size:14px; font-weight:600; ' + styles[kind];
+                    b.onclick = (e) => { e.stopPropagation(); fn(); };
+                    return b;
+                };
+                btns.appendChild(mk('이동', 'go', () => goTo(idx)));
+                btns.appendChild(mk('이 문장만 다시 만들기', 'redo', () => setFinderRange(n, 'both')));
+                btns.appendChild(mk('시작', 'plain', () => setFinderRange(n, 'start')));
+                btns.appendChild(mk('끝', 'plain', () => setFinderRange(n, 'end')));
+
+                row.appendChild(top);
+                row.appendChild(btns);
+                list.appendChild(row);
+            });
+        }
+
         // 지금 생성 범위를 계산한다 — "직접 범위 지정"이 켜져 있으면 그 문장 번호를,
         // 아니면 평소처럼 챕터 드롭다운에서 고른 챕터 범위를 쓴다.
         function getActiveGenerationRange() {
@@ -5455,10 +5678,10 @@ body.day-mode header.border-b {
             });
 
             const toneMap = {
-                solemn: { name: '중후함', text: '중후하고 깊이 있는 강론 톤', rate: 1.0, pitch: 1.0 },
-                warm: { name: '따뜻함', text: '서재에서 들려주는 따뜻한 이야기 톤', rate: 1.0, pitch: 1.0 },
-                calm: { name: '차분함', text: '고요하고 평온한 명상 톤', rate: 1.0, pitch: 1.0 },
-                dramatic: { name: '생동감', text: '극적이고 생동감 넘치는 연극 톤', rate: 1.0, pitch: 1.0 }
+                solemn: { name: '중후함', text: '중후하고 깊이 있는 강론 톤', rate: 0.95, pitch: 1.0 },
+                warm: { name: '따뜻함', text: '서재에서 들려주는 따뜻한 이야기 톤', rate: 0.95, pitch: 1.0 },
+                calm: { name: '차분함', text: '고요하고 평온한 명상 톤', rate: 0.95, pitch: 1.0 },
+                dramatic: { name: '생동감', text: '극적이고 생동감 넘치는 연극 톤', rate: 0.95, pitch: 1.0 }
             };
 
             const t = toneMap[tone] || toneMap.solemn;
@@ -5467,7 +5690,8 @@ body.day-mode header.border-b {
 
             currentRate = t.rate;
             currentPitch = t.pitch;
-            syncSpeedPitchDisplays();
+            document.getElementById('rate-display').textContent = currentRate.toFixed(2) + 'x';
+            document.getElementById('pitch-display').textContent = currentPitch.toFixed(1);
         }
 
         function initVoices() {
@@ -5863,41 +6087,9 @@ body.day-mode header.border-b {
             }
         }
 
-        // 속도/높이 표시를 화면에 있는 모든 자리(위쪽 카드 + 파일 재생 컨트롤의 미니 버튼)에
-        // 한 번에 맞춰준다. 새로 어디가 추가되어도 여기만 손보면 다 같이 갱신된다.
-        function syncSpeedPitchDisplays() {
-            const rEl = document.getElementById('rate-display');
-            const pEl = document.getElementById('pitch-display');
-            const rMini = document.getElementById('rate-display-mini');
-            const pMini = document.getElementById('pitch-display-mini');
-            const rFs = document.getElementById('rate-display-fs');
-            const pFs = document.getElementById('pitch-display-fs');
-            if (rEl) rEl.textContent = currentRate.toFixed(2) + 'x';
-            if (pEl) pEl.textContent = currentPitch.toFixed(1);
-            if (rMini) rMini.textContent = currentRate.toFixed(2) + 'x';
-            if (pMini) pMini.textContent = currentPitch.toFixed(1);
-            if (rFs) rFs.textContent = currentRate.toFixed(2) + 'x';
-            if (pFs) pFs.textContent = currentPitch.toFixed(1);
-        }
-
-        function promptAdjustRate() {
-            const input = prompt("속도를 숫자로 입력하세요 (0.5~2.0):", currentRate.toFixed(2));
-            if (input === null) return;
-            const n = parseFloat(input);
-            if (isNaN(n)) { setStatus("⚠️ 올바른 숫자를 입력해 주세요."); return; }
-            adjustRate(Math.max(0.5, Math.min(2.0, n)) - currentRate);
-        }
-        function promptAdjustPitch() {
-            const input = prompt("음높이를 숫자로 입력하세요 (0.1~2.0):", currentPitch.toFixed(1));
-            if (input === null) return;
-            const n = parseFloat(input);
-            if (isNaN(n)) { setStatus("⚠️ 올바른 숫자를 입력해 주세요."); return; }
-            adjustPitch(Math.max(0.1, Math.min(2.0, n)) - currentPitch);
-        }
-
         function adjustRate(delta) {
             currentRate = Math.max(0.5, Math.min(2.0, parseFloat((currentRate + delta).toFixed(2))));
-            syncSpeedPitchDisplays();
+            document.getElementById('rate-display').textContent = currentRate.toFixed(2) + 'x';
             if (currentAISourceNode && audioCtx) {
                 currentAISourceNode.playbackRate.setValueAtTime(currentRate, audioCtx.currentTime);
             }
@@ -5909,7 +6101,7 @@ body.day-mode header.border-b {
 
         function adjustPitch(delta) {
             currentPitch = Math.max(0.1, Math.min(2.0, parseFloat((currentPitch + delta).toFixed(1))));
-            syncSpeedPitchDisplays();
+            document.getElementById('pitch-display').textContent = currentPitch.toFixed(1);
         }
 
         // ---- 낮/밤 모드 (자동 + 수동) ----
