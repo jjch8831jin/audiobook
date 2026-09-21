@@ -524,7 +524,7 @@ body.day-mode header.border-b {
                     </div>
                 </div>
                 <div class="space-y-0.5 px-0.5 relative">
-        <input type="range" id="main-audio-seek-slider" min="0" max="100" value="0" step="0.1" oninput="seekMainAudio(this.value)" class="w-full h-1 bg-stone-800 rounded-lg appearance-none cursor-pointer accent-emerald-400" disabled>
+        <input type="range" id="main-audio-seek-slider" min="0" max="100" value="0" step="0.1" oninput="seekMainAudio(this.value)" onchange="seekMainAudioCommit(this.value)" class="w-full h-1 bg-stone-800 rounded-lg appearance-none cursor-pointer accent-emerald-400" disabled>
         <div id="main-audio-seek-preview" class="hidden absolute -translate-x-1/2 -translate-y-full bg-stone-950 border border-stone-700 text-[15px] text-stone-200 px-2 py-1 rounded-lg shadow-lg pointer-events-none z-10 font-mono"></div>
         <div class="flex justify-between text-[15px] text-stone-500 font-mono">
             <span id="main-audio-current-time">00:00</span>
@@ -1824,6 +1824,7 @@ body.day-mode header.border-b {
         // 목록에서 곡을 클릭하면 그 파일로 바로 넘어가 재생한다.
         function renderMainAudioPlaylist() {
             syncQueueAutoAdvance();
+            ensureQueueDurations();
             const box = document.getElementById('main-audio-playlist-box');
             const list = document.getElementById('main-audio-playlist-list');
             const countEl = document.getElementById('main-audio-playlist-count');
@@ -6238,11 +6239,96 @@ body.day-mode header.border-b {
             onVoiceOrEngineChange();
         }
 
+        // ===== 파일 시간바: 연결한 파일이 2개 이상이면 "전체 시간"으로 보여준다 =====
+        // (파일이 2개면 2개를 합친 시간, 3개면 3개를 합친 시간. 시간바를 옮기면 알맞은 파일로 넘어가서 그 위치부터 재생)
+        let seekDragging = false, seekDragTimer = null;
+
+        function formatClock(sec) {
+            sec = Math.max(0, Math.floor(sec || 0));
+            const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+            const mm = String(m).padStart(2, '0'), ss = String(s).padStart(2, '0');
+            return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+        }
+
+        // 각 파일의 길이를 미리 재어 둔다 (파일을 연결하거나 복원할 때 한 번씩)
+        function ensureQueueDurations() {
+            localAudioQueue.forEach(it => {
+                if (it.duration > 0 || it.durLoading || it.durFailed) return;
+                it.durLoading = true;
+                try {
+                    const a = new Audio();
+                    a.preload = 'metadata';
+                    a.addEventListener('loadedmetadata', () => {
+                        it.durLoading = false;
+                        if (a.duration && isFinite(a.duration)) it.duration = a.duration; else it.durFailed = true;
+                        try { a.removeAttribute('src'); a.load(); } catch (e) {}
+                        updateMainAudioSeekUI();
+                    }, { once: true });
+                    a.addEventListener('error', () => { it.durLoading = false; it.durFailed = true; }, { once: true });
+                    a.src = it.url;
+                } catch (e) { it.durLoading = false; it.durFailed = true; }
+            });
+        }
+
+        // 파일이 2개 이상일 때: 전체 길이, 앞 파일들의 길이 합, 각 파일의 시작 위치
+        function getQueueTimeline() {
+            if (!isFullAudioMode || localAudioQueue.length < 2 || localAudioQueueIndex < 0) return null;
+            const ab = document.getElementById('local-audiobook-audio');
+            let total = 0, before = 0, known = true;
+            const starts = [];
+            localAudioQueue.forEach((it, i) => {
+                let d = it.duration;
+                if (i === localAudioQueueIndex && ab && ab.duration && isFinite(ab.duration)) { d = ab.duration; it.duration = d; }
+                if (!(d > 0)) { known = false; d = 0; }
+                starts.push(total);
+                if (i < localAudioQueueIndex) before += d;
+                total += d;
+            });
+            return { total, before, known, starts };
+        }
+
         function seekMainAudio(val) {
+            const tl = getQueueTimeline();
+            if (tl && tl.known && tl.total > 0) {
+                // 여러 파일: 드래그하는 동안은 시간 표시만 바꾸고, 손을 떼면(seekMainAudioCommit) 실제로 이동한다.
+                seekDragging = true;
+                clearTimeout(seekDragTimer);
+                seekDragTimer = setTimeout(() => { seekDragging = false; }, 4000);
+                const curEl = document.getElementById('main-audio-current-time');
+                if (curEl) curEl.textContent = formatClock((parseFloat(val) / 100) * tl.total);
+                return;
+            }
             const abPlayer = document.getElementById('local-audiobook-audio');
             if (abPlayer && abPlayer.duration) {
                 abPlayer.currentTime = (val / 100) * abPlayer.duration;
             }
+        }
+
+        function seekMainAudioCommit(val) {
+            seekDragging = false;
+            clearTimeout(seekDragTimer);
+            const tl = getQueueTimeline();
+            if (!(tl && tl.known && tl.total > 0)) return;
+            const target = Math.min(tl.total, Math.max(0, (parseFloat(val) / 100) * tl.total));
+            let idx = tl.starts.length - 1;
+            for (let i = 0; i < tl.starts.length; i++) {
+                const end = (i + 1 < tl.starts.length) ? tl.starts[i + 1] : tl.total;
+                if (target < end) { idx = i; break; }
+            }
+            const offset = Math.max(0, target - tl.starts[idx]);
+            const ab = document.getElementById('local-audiobook-audio');
+            if (!ab) return;
+            if (idx === localAudioQueueIndex) {
+                ab.currentTime = Math.min(offset, Math.max(0, (ab.duration || offset) - 0.05));
+                updateMainAudioSeekUI();
+                return;
+            }
+            const wasPlaying = !ab.paused;
+            loadLocalAudioQueueIndex(idx, wasPlaying);
+            ab.addEventListener('loadedmetadata', () => {
+                try { ab.currentTime = Math.min(offset, Math.max(0, (ab.duration || offset) - 0.05)); } catch (e) {}
+                updateMainAudioSeekUI();
+            }, { once: true });
         }
 
         function updateMainAudioSeekUI() {
@@ -6251,6 +6337,18 @@ body.day-mode header.border-b {
             const curEl = document.getElementById('main-audio-current-time');
             const durEl = document.getElementById('main-audio-duration-time');
             if (!slider || !abPlayer) return;
+
+            const tl = getQueueTimeline();
+            if (tl && tl.known && tl.total > 0 && abPlayer.duration && isFinite(abPlayer.duration)) {
+                slider.disabled = false;
+                if (!seekDragging) {
+                    const cur = tl.before + abPlayer.currentTime;
+                    slider.value = Math.min(100, (cur / tl.total) * 100);
+                    if (curEl) curEl.textContent = formatClock(cur);
+                }
+                if (durEl) durEl.textContent = formatClock(tl.total);
+                return;
+            }
 
             if (abPlayer.duration && isFinite(abPlayer.duration)) {
                 slider.disabled = false;
@@ -6261,7 +6359,7 @@ body.day-mode header.border-b {
                 const durM = Math.floor(dur / 60).toString().padStart(2, '0');
                 const durS = (dur % 60).toString().padStart(2, '0');
                 if (curEl) curEl.textContent = `${curM}:${curS}`;
-                if (durEl) durEl.textContent = `${durM}:${durS}`;
+                if (durEl) durEl.textContent = `${durM}:${durS}` + ((tl && !tl.known) ? ' …' : '');
                 slider.value = (abPlayer.currentTime / abPlayer.duration) * 100;
             } else {
                 slider.disabled = true;
@@ -7662,6 +7760,8 @@ body.day-mode header.border-b {
             updateReaderTitleCardPosition();
 
             setupSeekBarPreview('main-audio-seek-slider', 'main-audio-seek-preview', (ratio) => {
+                const tl = getQueueTimeline();
+                if (tl && tl.known && tl.total > 0) return formatClock(ratio * tl.total);
                 const abPlayer = document.getElementById('local-audiobook-audio');
                 if (!abPlayer || !abPlayer.duration || !isFinite(abPlayer.duration)) return null;
                 return formatSecondsAsMMSS(ratio * abPlayer.duration);
