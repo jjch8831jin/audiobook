@@ -5059,8 +5059,9 @@ body.zoom-wide main > aside {
         // (sticky는 상황에 따라 예상대로 안 붙는 경우가 있어서, 더 확실한 방식으로 대신한다.)
 // ================= 화면 확대/축소 (50~200%) =================
         // 크롬의 확대/축소처럼 화면 전체(글자·버튼·간격)가 함께 커지고 줄어든다. 정한 크기는 기억해 둔다.
-        var ZOOM_MIN = 50, ZOOM_MAX = 200, ZOOM_STEP = 10, ZOOM_KEY = 'audiobook_page_zoom';
+        var ZOOM_MIN = 30, ZOOM_MAX = 200, ZOOM_STEP = 5, ZOOM_KEY = 'audiobook_page_zoom';
         var pageZoom = 1;
+        var fullscreenSavedZoomPct = null;
         var _fixedScaleCache = null;
 
         // 화면을 확대하면 브라우저마다 좌표(getBoundingClientRect)와 고정 위치(position:fixed) 값의 단위가 다르게 나올 수 있다.
@@ -5136,9 +5137,13 @@ body.zoom-wide main > aside {
 
         // 확대창의 배율에 맞춰, "실제로 보이는 화면 폭"이 넓으면(기본 700px 이상)
         // 본문·플레이어를 PC처럼 나란히 배치한다. 배율을 다시 올리면 자동으로 한 줄 배치로 돌아온다.
-        var WIDE_ZOOM_THRESHOLD = 700;
+        // 이 사이트 자체가 화면 폭 1024px부터 PC처럼 나란히 배치되도록 만들어져 있다 (크롬 확대/축소로 줄였을 때와 같은 기준).
+        var WIDE_ZOOM_THRESHOLD = 1024;
         function updateWideZoomLayout() {
-            const effectiveWidth = window.innerWidth / (pageZoom || 1);
+            // pageZoom(우리가 정한 값)이 아니라, 그 기기에서 실제로 측정된 배율(getFixedScale)로 계산해서
+            // 기기마다 body{zoom}이 조금씩 다르게 동작하더라도 어긋나지 않게 한다.
+            const measuredScale = getFixedScale() || pageZoom || 1;
+            const effectiveWidth = window.innerWidth / measuredScale;
             document.body.classList.toggle('zoom-wide', effectiveWidth >= WIDE_ZOOM_THRESHOLD);
         }
 
@@ -5225,6 +5230,11 @@ function updateReaderTitleCardPosition() {
             isReaderFullscreen = !isReaderFullscreen;
 
             if (isReaderFullscreen) {
+                // 확대 배율이 적용된 상태에서는 전체화면이 실제 화면을 다 채우지 못하는 문제가 있어서,
+                // 전체화면으로 보는 동안은 배율을 잠깐 100%로 풀어둔다.
+                const curPct = Math.round((pageZoom || 1) * 100);
+                fullscreenSavedZoomPct = (curPct !== 100) ? curPct : null;
+                if (fullscreenSavedZoomPct) applyPageZoom(100, false);
                 fullscreenFontSizePt = 18; // 들어갈 때마다 기본값(18pt)으로 시작
                 applyFullscreenFontSize();
                 const titleEl = document.getElementById('current-book-title');
@@ -5235,6 +5245,9 @@ function updateReaderTitleCardPosition() {
             } else {
                 el.classList.remove('reader-fullscreen-active');
                 if (btn) btn.innerHTML = '<i class="fa-solid fa-expand text-[15px]"></i>';
+                // 전체화면에 들어가면서 바꿔둔 배율을 원래대로 되돌린다.
+                if (fullscreenSavedZoomPct) applyPageZoom(fullscreenSavedZoomPct, false);
+                fullscreenSavedZoomPct = null;
             }
         }
 
