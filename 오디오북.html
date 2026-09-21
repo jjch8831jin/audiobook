@@ -5707,14 +5707,25 @@ body.day-mode header.border-b {
 
         function stopTTSAndReset() {
             stopTTS();
-            
+
             if (isFullAudioMode) {
                 const abPlayer = document.getElementById('local-audiobook-audio');
-                if (abPlayer) abPlayer.currentTime = 0;
+                // 연결한 파일이 여러 개면, 지금 파일이 아니라 "맨 처음 파일"의 처음으로 돌아간다 (전체 시간바 기준 00:00)
+                if (localAudioQueue.length > 1 && localAudioQueueIndex !== 0) {
+                    loadLocalAudioQueueIndex(0, false);
+                }
+                if (abPlayer) { try { abPlayer.currentTime = 0; } catch (e) {} }
             }
-            
-            currentIndex = 0;
+
+            // 처음 파일이 챕터 1이 아닐 수도 있으니, 그 파일의 첫 문장으로 맞춘다 (모르면 맨 처음 문장)
+            let startIdx = 0;
+            try {
+                const od = isFullAudioMode ? ensureSentenceTimeOffsetsLoaded() : null;
+                if (od && typeof od.start === 'number' && od.start >= 0 && od.start < sentences.length) startIdx = od.start;
+            } catch (e) {}
+            currentIndex = startIdx;
             highlightCurrentSentence();
+            updateMainAudioSeekUI();
             setStatus("⏹️ 재생이 정지되고 처음으로 돌아갔습니다.");
         }
 
