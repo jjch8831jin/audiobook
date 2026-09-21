@@ -1702,6 +1702,7 @@ body.day-mode header.border-b {
                 dbId: `${uploadBatchId}_${i}`
             }));
             localAudioQueue = localAudioQueue.concat(newItems);
+            newItems.forEach((it, i) => attachSyncToItem(it, files[i]));
 
             // 새로 추가한 파일들만 저장한다 (기존에 저장돼 있던 파일들은 그대로 유지) —
             // 창을 닫았다가 다시 열어도(새로고침해도) 재생목록이 남아있도록.
@@ -1788,6 +1789,9 @@ body.day-mode header.border-b {
                 renderBookQueueSentencesOnly(bookQueue[idx].title, bookQueue[idx].text);
                 renderBookQueueList();
             }
+
+            // 이 파일에 문장 시간 기록이 들어 있으면 그것으로 스크롤·강조를 맞춘다
+            if (item.syncRaw) applyItemSync(item);
 
             if (autoPlay) {
                 abPlayer.play().then(() => {
@@ -2176,6 +2180,7 @@ body.day-mode header.border-b {
                         url: URL.createObjectURL(r.blob),
                         dbId: r.id
                     }));
+                    localAudioQueue.forEach((it, i) => attachSyncToItem(it, rows[i].blob));
 
                     let savedIndex = 0;
                     try {
@@ -2227,6 +2232,7 @@ body.day-mode header.border-b {
                         url: URL.createObjectURL(r.blob),
                         dbId: r.id
                     }));
+                    localAudioQueue.forEach((it, i) => attachSyncToItem(it, rows[i].blob));
                     isFullAudioMode = true;
                     // 이 책에 연결된 파일이 여러 개(챕터가 여럿)면, 따로 안 눌러도
                     // 자동으로 순서대로 이어서 재생되게 한다.
@@ -3122,6 +3128,18 @@ body.day-mode header.border-b {
                 }
             }
 
+            // 문장별 시작 시간 기록을 파일 안에 함께 담는다 (다른 기기에서도 스크롤이 맞도록)
+            let embeddedSync = false;
+            if (!customBlob && !isZip) {
+                try {
+                    const payload = getSyncPayload(currentChapterIndex);
+                    if (payload) {
+                        blobToSave = usingMp3 ? await embedSyncIntoMp3(blobToSave, payload) : await embedSyncIntoWav(blobToSave, payload);
+                        embeddedSync = true;
+                    }
+                } catch (e) { console.warn('동기화 정보를 파일에 넣지 못했어요(오디오는 그대로 저장):', e); }
+            }
+
             if (writable) {
                 await writable.write(blobToSave);
                 await writable.close();
@@ -3132,7 +3150,7 @@ body.day-mode header.border-b {
 
             const downloadLink = document.getElementById('audiobook-download-link');
             if (downloadLink) {
-                const url = (customBlob || usingMp3) ? URL.createObjectURL(blobToSave) : generatedAudiobookUrl;
+                const url = (customBlob || usingMp3 || embeddedSync) ? URL.createObjectURL(blobToSave) : generatedAudiobookUrl;
                 downloadLink.href = url;
                 downloadLink.download = defaultFilename;
                 downloadLink.click();
@@ -3157,14 +3175,158 @@ body.day-mode header.border-b {
             if (btnMp3) btnMp3.className = downloadFormat === 'mp3' ? activeClass : inactiveClass;
         }
 
+        // ================= 오디오 파일에 "문장별 시작 시간"을 함께 담기 =================
+        // 스크롤·강조가 정확히 맞으려면 "몇 번째 문장이 몇 초에 시작하는지" 기록이 필요하다.
+        // 예전에는 이 기록이 오디오를 만든 브라우저에만 남아서, 다른 기기·다른 주소에서 파일을
+        // 재생하면 스크롤이 어긋났다. 이제는 내려받는 오디오 파일 안에 이 기록을 함께 넣고
+        // (WAV: 'sync' 조각, MP3: ID3 태그), 파일을 연결할 때 꺼내서 쓴다. 소리에는 영향이 없다.
+        function computeSentencesHash() {
+            return simpleHash((sentences || []).join('\n'));
+        }
+
+        function getSyncPayload(chapterIndex) {
+            let d = null;
+            if (sentenceTimeOffsets && sentenceTimeOffsets.bookId === currentBookId && sentenceTimeOffsets.chapterIndex === chapterIndex) {
+                d = sentenceTimeOffsets;
+            } else {
+                try {
+                    const raw = localStorage.getItem(`ab_offsets::${currentBookId}::${chapterIndex}`);
+                    if (raw) d = JSON.parse(raw);
+                } catch (e) { d = null; }
+            }
+            if (!d || !Array.isArray(d.offsets) || d.offsets.length === 0) return null;
+            const titleEl = document.getElementById('current-book-title');
+            return {
+                v: 1, tool: 'audiobook-sync',
+                title: titleEl ? titleEl.textContent : '',
+                chapterIndex, start: d.start, end: d.end, offsets: d.offsets,
+                rate: d.rate || currentRate,
+                sentenceCount: sentences.length,
+                textHash: computeSentencesHash()
+            };
+        }
+
+        // 한글이 섞여 있어도 안전하도록 ASCII 문자만 쓰는 JSON 문자열로 만든다
+        function asciiJson(obj) {
+            return JSON.stringify(obj).replace(/[\u0080-\uffff]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+        }
+
+        // WAV: 파일 끝에 'sync' 조각을 덧붙이고 RIFF 크기만 고친다 (소리 데이터는 그대로)
+        async function embedSyncIntoWav(blob, payload) {
+            const json = new TextEncoder().encode(asciiJson(payload));
+            const pad = json.length % 2;
+            const chunk = new Uint8Array(8 + json.length + pad);
+            chunk.set([0x73, 0x79, 0x6e, 0x63], 0);            // 'sync'
+            new DataView(chunk.buffer).setUint32(4, json.length, true);
+            chunk.set(json, 8);
+            const sizeBytes = new Uint8Array(4);
+            new DataView(sizeBytes.buffer).setUint32(0, blob.size + chunk.length - 8, true);
+            return new Blob([blob.slice(0, 4), sizeBytes, blob.slice(8), chunk], { type: 'audio/wav' });
+        }
+
+        // MP3: 파일 맨 앞에 ID3v2.3 태그(TXXX 'SAJU-SYNC')를 붙인다
+        async function embedSyncIntoMp3(blob, payload) {
+            const desc = 'SAJU-SYNC';
+            const json = asciiJson(payload);
+            const content = new Uint8Array(1 + desc.length + 1 + json.length);
+            content[0] = 0; // ISO-8859-1
+            for (let i = 0; i < desc.length; i++) content[1 + i] = desc.charCodeAt(i);
+            content[1 + desc.length] = 0;
+            for (let i = 0; i < json.length; i++) content[2 + desc.length + i] = json.charCodeAt(i);
+            const frame = new Uint8Array(10 + content.length);
+            frame.set([0x54, 0x58, 0x58, 0x58], 0);             // 'TXXX'
+            new DataView(frame.buffer).setUint32(4, content.length, false);
+            frame.set(content, 10);
+            const tag = new Uint8Array(10 + frame.length);
+            tag.set([0x49, 0x44, 0x33, 0x03, 0x00, 0x00], 0);   // 'ID3' v2.3
+            const n = frame.length;
+            tag[6] = (n >> 21) & 0x7f; tag[7] = (n >> 14) & 0x7f; tag[8] = (n >> 7) & 0x7f; tag[9] = n & 0x7f;
+            tag.set(frame, 10);
+            return new Blob([tag, blob], { type: 'audio/mpeg' });
+        }
+
+        // 파일(File/Blob)에서 동기화 정보를 꺼낸다. 없으면 null.
+        async function extractSyncFromFile(file) {
+            try {
+                const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+                const str = (a, from, len) => String.fromCharCode(...a.slice(from, from + len));
+                if (str(head, 0, 4) === 'RIFF' && str(head, 8, 4) === 'WAVE') {
+                    let pos = 12;
+                    while (pos + 8 <= file.size) {
+                        const h = new DataView(await file.slice(pos, pos + 8).arrayBuffer());
+                        const id = String.fromCharCode(h.getUint8(0), h.getUint8(1), h.getUint8(2), h.getUint8(3));
+                        const len = h.getUint32(4, true);
+                        if (id === 'sync') return JSON.parse(await file.slice(pos + 8, pos + 8 + len).text());
+                        pos += 8 + len + (len % 2);
+                    }
+                    return null;
+                }
+                if (str(head, 0, 3) === 'ID3') {
+                    const ver = head[3];
+                    const bodySize = ((head[6] & 0x7f) << 21) | ((head[7] & 0x7f) << 14) | ((head[8] & 0x7f) << 7) | (head[9] & 0x7f);
+                    const body = new Uint8Array(await file.slice(10, 10 + bodySize).arrayBuffer());
+                    let p = 0;
+                    while (p + 10 <= body.length) {
+                        const id = str(body, p, 4);
+                        if (!/^[A-Z0-9]{4}$/.test(id)) break;
+                        const fsz = ver === 4
+                            ? (((body[p + 4] & 0x7f) << 21) | ((body[p + 5] & 0x7f) << 14) | ((body[p + 6] & 0x7f) << 7) | (body[p + 7] & 0x7f))
+                            : (body[p + 4] * 16777216 + (body[p + 5] << 16) + (body[p + 6] << 8) + body[p + 7]);
+                        const cs = p + 10;
+                        if (id === 'TXXX') {
+                            const enc = body[cs];
+                            let q = cs + 1;
+                            while (q < cs + fsz && body[q] !== 0) q++;
+                            const desc = new TextDecoder().decode(body.slice(cs + 1, q));
+                            if (desc === 'SAJU-SYNC' && (enc === 0 || enc === 3)) {
+                                return JSON.parse(new TextDecoder().decode(body.slice(q + 1, cs + fsz)));
+                            }
+                        }
+                        p = cs + fsz;
+                    }
+                }
+            } catch (e) { /* 읽지 못하면 동기화 정보 없는 파일로 취급 */ }
+            return null;
+        }
+
+        // 연결한 오디오가 지금 열린 원고와 같은 원고로 만들어진 것이면, 그 기록을 재생에 쓴다.
+        function applyItemSync(item) {
+            if (!item || !item.syncRaw) return false;
+            if (!sentences || sentences.length === 0 || !currentBookId) return false;
+            const p = item.syncRaw;
+            if (p.textHash !== computeSentencesHash() || p.sentenceCount !== sentences.length) {
+                setStatus('⚠️ 이 오디오의 문장 시간 기록은 다른(또는 고치기 전) 원고 기준이라 스크롤이 어긋날 수 있어요. 이 챕터를 다시 만들어 주세요.');
+                return false;
+            }
+            const chIdx = (typeof p.chapterIndex === 'number') ? p.chapterIndex : currentChapterIndex;
+            if (chIdx !== currentChapterIndex) {
+                currentChapterIndex = chIdx;
+                const chapterSelect = document.getElementById('chapter-select');
+                if (chapterSelect) chapterSelect.value = String(chIdx);
+                if (typeof refreshChapterProgressLabel === 'function') refreshChapterProgressLabel();
+            }
+            sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chIdx, start: p.start, end: p.end, offsets: p.offsets, rate: p.rate };
+            return true;
+        }
+
+        function attachSyncToItem(item, fileOrBlob) {
+            extractSyncFromFile(fileOrBlob).then(p => {
+                if (p && p.tool === 'audiobook-sync' && Array.isArray(p.offsets)) item.syncRaw = p;
+                if (localAudioQueue[localAudioQueueIndex] === item) {
+                    if (item.syncRaw) applyItemSync(item);
+                    else setStatus('ℹ️ 이 오디오에는 문장 시간 기록이 들어 있지 않아서 스크롤이 조금 어긋날 수 있어요. 이 챕터를 다시 만들어 받으면 맞아요.');
+                }
+            }).catch(() => {});
+        }
+
         let sentenceTimeOffsets = null; // { bookId, chapterIndex, start, end, offsets: [...] } | null
 
         function saveSentenceTimeOffsets(chapterIndexAtStart, rangeStart, rangeEnd, offsets) {
-            sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chapterIndexAtStart, start: rangeStart, end: rangeEnd, offsets };
+            sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chapterIndexAtStart, start: rangeStart, end: rangeEnd, offsets, rate: currentRate };
             try {
                 localStorage.setItem(
                     `ab_offsets::${currentBookId}::${chapterIndexAtStart}`,
-                    JSON.stringify({ start: rangeStart, end: rangeEnd, offsets })
+                    JSON.stringify({ start: rangeStart, end: rangeEnd, offsets, rate: currentRate })
                 );
             } catch (e) { console.warn('문장별 시간 정보 저장 실패:', e); }
         }
@@ -3749,7 +3911,12 @@ body.day-mode header.border-b {
                 if (!ok) { isGeneratingAllChapters = false; break; }
                 if (!isGeneratingAllChapters) break;
 
-                const arrayBuf = await generatedAudiobookBlob.arrayBuffer();
+                let chapterBlob = generatedAudiobookBlob;
+                try {
+                    const payload = getSyncPayload(idx);
+                    if (payload) chapterBlob = await embedSyncIntoWav(chapterBlob, payload);
+                } catch (e) { console.warn('동기화 정보를 파일에 넣지 못했어요(오디오는 그대로 저장):', e); }
+                const arrayBuf = await chapterBlob.arrayBuffer();
                 generatedFiles.push({ name: `${title} - 챕터${idx + 1}.wav`, bytes: new Uint8Array(arrayBuf) });
             }
 
@@ -7561,7 +7728,7 @@ body.day-mode header.border-b {
                             // 저장해둔 문장별 시간은 "속도 1.0x 기준"으로 기록되어 있는데, 실제
                             // 재생 파일은 다운로드할 때의 속도(currentRate)로 늘어나거나 줄어들어
                             // 있다. 그래서 지금 재생 위치를 다시 1.0x 기준 시간으로 환산해서 비교한다.
-                            const t = abPlayer.currentTime * currentRate;
+                            const t = abPlayer.currentTime * (offsetData.rate || currentRate);
                             const offs = offsetData.offsets;
                             let lo = 0, hi = offs.length - 1, found = 0;
                             while (lo <= hi) {
