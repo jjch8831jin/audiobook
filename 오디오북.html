@@ -518,7 +518,7 @@ body.day-mode header.border-b {
                 <div class="flex items-center justify-between flex-wrap gap-2 px-0.5">
                     <span class="text-[15px] text-stone-400 font-semibold uppercase tracking-wider whitespace-nowrap"><i class="fa-solid fa-book-open-reader text-amber-400 mr-1.5"></i>문장읽기 컨트롤</span>
                     <div class="flex items-center gap-1.5 shrink-0">
-                        <input type="file" id="main-audio-input" class="hidden" multiple onchange="handleMainAudioUpload(event)">
+                        <input type="file" id="main-audio-input" class="hidden" multiple accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac,.webm" onchange="handleMainAudioUpload(event)">
                         <button type="button" onclick="openMainAudioFilePicker()" title="파일 연동" class="nb-open"><i class="fa-solid fa-folder-open" style="margin-right:4px;"></i>파일 연동</button>
                         <button type="button" onclick="chooseAudioOpenFolder()" title="음성 파일을 주로 두는 폴더를 따로 지정 (원고 폴더와 별개)" class="nb-folder"><i class="fa-solid fa-folder"></i></button>
                     </div>
