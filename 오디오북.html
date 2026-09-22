@@ -7834,6 +7834,10 @@ body.day-mode header.border-b {
             if (rEl) rEl.textContent = currentRate.toFixed(2) + 'x';
 
             setTone('solemn');
+            // 어조를 고르면 그 어조의 속도(0.95x)가 적용되는데, 앱을 처음 열 때는 항상 1.00x(기본 속도)로 시작한다.
+            currentRate = 1.0;
+            const rEl2 = document.getElementById('rate-display');
+            if (rEl2) rEl2.textContent = currentRate.toFixed(2) + 'x';
 
             const savedText = localStorage.getItem('audiobook_last_text');
             if (savedText) {
