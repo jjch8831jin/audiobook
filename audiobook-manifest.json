@@ -2,7 +2,7 @@
   "name": "감성 오디오북 플레이어",
   "short_name": "오디오북",
   "description": "오디오북 플레이어 & AI 문학 라운지",
-  "start_url": "./오디오북.html",
+  "start_url": "./%EC%98%A4%EB%94%94%EC%98%A4%EB%B6%81.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#1c1917",
