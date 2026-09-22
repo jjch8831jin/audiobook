@@ -369,6 +369,16 @@ body.zoom-wide main > aside {
                     <button id="reader-fullscreen-stop-btn" onclick="fullscreenStop()" title="멈춤 (처음으로)" class="items-center justify-center w-10 h-10 rounded-full bg-stone-800 hover:bg-rose-500 hover:text-stone-900 text-rose-300 border border-stone-700 shadow-lg active:scale-90 transition">
                     <i class="fa-solid fa-stop text-lg"></i>
                 </button>
+                    <div class="flex items-center bg-stone-900 border border-amber-500 rounded-xl h-10 px-1.5 space-x-1" title="속도 조절">
+                        <button onclick="adjustRate(-0.01)" title="속도 느리게" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">-</button>
+                        <span id="rate-display-fs" class="font-mono font-bold text-base w-10 text-center text-white">1.00x</span>
+                        <button onclick="adjustRate(0.01)" title="속도 빠르게" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
+                    </div>
+                    <div class="flex items-center bg-stone-900 rounded-xl h-10 px-1.5 space-x-1" style="border: 1px solid #a78bfa;" title="음성 톤 (음높이)">
+                        <button onclick="adjustPitch(-0.1)" title="음높이 낮게" class="w-7 h-7 rounded-md font-extrabold text-base text-black active:scale-95 shadow flex items-center justify-center" style="background-color: #8b5cf6;">-</button>
+                        <span id="pitch-display-fs" class="font-mono font-bold text-base w-10 text-center text-white">1.0</span>
+                        <button onclick="adjustPitch(0.1)" title="음높이 높게" class="w-7 h-7 rounded-md font-extrabold text-base text-black active:scale-95 shadow flex items-center justify-center" style="background-color: #8b5cf6;">+</button>
+                    </div>
                     <div id="reader-fullscreen-font-controls" class="flex-row items-center bg-stone-800 border border-stone-700 rounded-full shadow-lg overflow-hidden">
                     <button onclick="adjustFullscreenFontSize(-1)" title="글자 작게" class="w-10 h-10 flex items-center justify-center hover:bg-amber-500 hover:text-stone-900 text-stone-300 active:scale-90 transition text-[16px]">
                         <i class="fa-solid fa-minus"></i>
@@ -5257,6 +5267,10 @@ body.zoom-wide main > aside {
                 fullscreenSavedZoomPct = (curPct !== 100) ? curPct : null;
                 if (fullscreenSavedZoomPct) applyPageZoom(100, false);
                 fullscreenFontSizePt = 18; // 들어갈 때마다 기본값(18pt)으로 시작
+                const rateFs2 = document.getElementById('rate-display-fs');
+                if (rateFs2) rateFs2.textContent = currentRate.toFixed(2) + 'x';
+                const pitchFs2 = document.getElementById('pitch-display-fs');
+                if (pitchFs2) pitchFs2.textContent = currentPitch.toFixed(1);
                 applyFullscreenFontSize();
                 const titleEl = document.getElementById('current-book-title');
                 const fsTitleEl = document.getElementById('fullscreen-book-title');
@@ -6752,6 +6766,8 @@ body.zoom-wide main > aside {
         function adjustRate(delta) {
             currentRate = Math.max(0.5, Math.min(2.0, parseFloat((currentRate + delta).toFixed(2))));
             document.getElementById('rate-display').textContent = currentRate.toFixed(2) + 'x';
+            const rateFs = document.getElementById('rate-display-fs');
+            if (rateFs) rateFs.textContent = currentRate.toFixed(2) + 'x';
             if (currentAISourceNode && audioCtx) {
                 currentAISourceNode.playbackRate.setValueAtTime(currentRate, audioCtx.currentTime);
             }
@@ -6764,6 +6780,8 @@ body.zoom-wide main > aside {
         function adjustPitch(delta) {
             currentPitch = Math.max(0.1, Math.min(2.0, parseFloat((currentPitch + delta).toFixed(1))));
             document.getElementById('pitch-display').textContent = currentPitch.toFixed(1);
+            const pitchFs = document.getElementById('pitch-display-fs');
+            if (pitchFs) pitchFs.textContent = currentPitch.toFixed(1);
         }
 
         // ---- 낮/밤 모드 (자동 + 수동) ----
