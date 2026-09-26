@@ -7979,6 +7979,14 @@ body.day-mode header.border-b {
                         updatePlayIcon();
                         stopBGM();
                         renderMainAudioPlaylist();
+                        // 재생이 완전히 끝났으므로, 방금 재생하던 파일의 속도(예: 0.95x) 표시를
+                        // 다시 기본값 1.00x로 되돌린다.
+                        currentRate = 1.0;
+                        activeFileGenRate = null;
+                        const rEl4 = document.getElementById('rate-display');
+                        if (rEl4) rEl4.textContent = currentRate.toFixed(2) + 'x';
+                        const rateFs4 = document.getElementById('rate-display-fs');
+                        if (rateFs4) rateFs4.textContent = currentRate.toFixed(2) + 'x';
                         setStatus(hasNextInQueue
                             ? "⏹️ 이 파일 재생이 끝났습니다. 재생목록에서 다음 파일을 선택하거나 '이어듣기'를 켜세요."
                             : "🎉 로드된 파일의 전체 낭독이 완료되었습니다.");
