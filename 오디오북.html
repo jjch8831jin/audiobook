@@ -423,7 +423,7 @@ body.day-mode header.border-b {
                         <span class="text-[15px] text-amber-400 font-bold mb-1">속도 조절</span>
                         <div class="flex items-center space-x-1 text-[15px]">
                             <button onclick="adjustRate(-0.01)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">-</button>
-                            <span id="rate-display" class="font-mono font-bold text-base w-10 text-center text-white">0.95x</span>
+                            <span id="rate-display" class="font-mono font-bold text-base w-10 text-center text-white">1.00x</span>
                             <button onclick="adjustRate(0.01)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
                         </div>
                     </div>
@@ -7845,6 +7845,15 @@ body.day-mode header.border-b {
             } else {
                 loadBookContent(DEFAULT_PRESET_BOOKS[0].title, DEFAULT_PRESET_BOOKS[0].text, false);
             }
+            // 위 restoreReadingProgress()가 마지막으로 쓰던 목소리를 복원하면서
+            // 그 목소리/어조의 기본 속도(예: 0.95)로 currentRate를 다시 바꿔버리는 경우가 있다.
+            // 앱을 처음 열 때는 항상 1.00x로 시작해야 하므로, 복원이 다 끝난 지금 시점에
+            // 한 번 더 확실히 1.00x로 고정한다.
+            currentRate = 1.0;
+            const rEl3 = document.getElementById('rate-display');
+            if (rEl3) rEl3.textContent = currentRate.toFixed(2) + 'x';
+            const rateFs3 = document.getElementById('rate-display-fs');
+            if (rateFs3) rateFs3.textContent = currentRate.toFixed(2) + 'x';
             // 복원된 책이 서재의 어느 항목인지 찾았다면(currentDraftId) 그 책에 연결된
             // 파일만 불러오고, 못 찾았다면 예전 방식대로 저장된 재생목록 전체를 불러온다.
             if (currentDraftId) {
