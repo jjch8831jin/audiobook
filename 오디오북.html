@@ -5246,6 +5246,21 @@ body.day-mode header.border-b {
             if (isFullAudioMode && abPlayer && abPlayer.src) {
                 startAudioContext();
                 abPlayer.volume = ttsVolume;
+                // 재생을 시작하기 직전, 지금 재생할 파일이 "몇 배속으로 만들어졌는지"를
+                // 다시 한번 확인해서 속도 표시와 실제 재생 속도를 맞춘다. (복원 시점의
+                // 자동 감지가 어떤 이유로든 실패했더라도, 재생 버튼을 누르면 항상 정확하게 맞도록)
+                const nowItem = localAudioQueue[localAudioQueueIndex];
+                if (nowItem && typeof nowItem.genRate === 'number' && nowItem.genRate > 0) {
+                    const gg = Math.max(0.5, Math.min(2.0, nowItem.genRate));
+                    if (Math.abs(currentRate - gg) > 0.004) {
+                        currentRate = gg;
+                        activeFileGenRate = gg;
+                        const rEl5 = document.getElementById('rate-display');
+                        if (rEl5) rEl5.textContent = currentRate.toFixed(2) + 'x';
+                        const rateFs5 = document.getElementById('rate-display-fs');
+                        if (rateFs5) rateFs5.textContent = currentRate.toFixed(2) + 'x';
+                    }
+                }
                 abPlayer.playbackRate = getFilePlaybackRate();
                 abPlayer.play().then(() => {
                     isPlaying = true;
