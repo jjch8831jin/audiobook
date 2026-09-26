@@ -1753,6 +1753,13 @@ body.day-mode header.border-b {
                     queueAutoAdvance = true;
                     updateContinuousPlayButtonUI();
                 }
+                // 지금 재생 중이 아니면(정지 상태), 방금 새로 추가한 파일 중 첫 번째를
+                // 바로 불러와서 속도 표시도 그 파일에 맞게 즉시 갱신한다. (재생 중이던
+                // 파일이 있으면 그건 건드리지 않고 그대로 둔다.)
+                const abPlayerNow = document.getElementById('local-audiobook-audio');
+                if (abPlayerNow && abPlayerNow.paused) {
+                    loadLocalAudioQueueIndex(startOrder, false);
+                }
                 renderMainAudioPlaylist();
             }
 
@@ -1785,7 +1792,17 @@ body.day-mode header.border-b {
 
             abPlayer.src = item.url;
             abPlayer.volume = ttsVolume;
-            activeFileGenRate = item.genRate || null;
+            // 이 파일이 "몇 배속으로 만들어졌는지" 이미 알고 있으면(예: 이전에 같은 파일을
+            // 재생해서 읽어둔 값) 그 속도를, 모르면(아직 확인 전이거나 정보가 없는 파일) 일단
+            // 기본값 1.00x를 표시한다. 그래야 이전 파일의 속도가 다음 파일로 그대로
+            // 남아있지 않는다. (정보가 있는 파일이면 잠시 후 attachSyncToItem이 다시 정확히 맞춘다.)
+            const knownRate = (typeof item.genRate === 'number' && item.genRate > 0) ? item.genRate : 1.0;
+            activeFileGenRate = (typeof item.genRate === 'number' && item.genRate > 0) ? item.genRate : null;
+            currentRate = knownRate;
+            const rEl6 = document.getElementById('rate-display');
+            if (rEl6) rEl6.textContent = currentRate.toFixed(2) + 'x';
+            const rateFs6 = document.getElementById('rate-display-fs');
+            if (rateFs6) rateFs6.textContent = currentRate.toFixed(2) + 'x';
             abPlayer.playbackRate = getFilePlaybackRate();
             abPlayer.load();
             renderMainAudioPlaylist();
