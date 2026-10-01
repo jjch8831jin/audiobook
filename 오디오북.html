@@ -2587,7 +2587,7 @@ body.day-mode header.border-b {
             const spans = [];
             // 줄바꿈 한 번(워드에서 그냥 줄만 바꾼 곳)은 문장이 끝난 걸로 보지 않고 이어서 본다.
             // 줄바꿈이 두 번 이상(빈 줄, 진짜 문단 구분)일 때만 거기서 끊는다.
-            const re = /(?<=[.?!])\s+|\n{2,}/g;
+            const re = /(?<=[^0-9][.?!])\s+|\n{2,}/g;
             let last = 0, m;
             const push = (a, b) => {
                 const t = text.slice(a, b);
@@ -4814,7 +4814,7 @@ body.day-mode header.border-b {
             if (titleEl) titleEl.textContent = title;
 
             const rawSentences = collapseSoftLineBreaks(text)
-                .split(/(?<=[.?!])\s+|\n+/)
+                .split(/(?<=[^0-9][.?!])\s+|\n+/)
                 .map(s => s.trim())
                 .filter(s => s.length > 0);
             sentences = rawSentences.length > 0 ? rawSentences : [text.trim() || "내용이 없습니다."];
@@ -5025,7 +5025,7 @@ body.day-mode header.border-b {
             if (titleEl) titleEl.textContent = title;
 
             const rawSentences = collapseSoftLineBreaks(text)
-                .split(/(?<=[.?!])\s+|\n+/)
+                .split(/(?<=[^0-9][.?!])\s+|\n+/)
                 .map(s => s.trim())
                 .filter(s => s.length > 0);
 
