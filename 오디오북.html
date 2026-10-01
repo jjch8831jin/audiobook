@@ -2575,8 +2575,12 @@ body.day-mode header.border-b {
         // 원고 원문에서 각 문장이 있는 위치를 앱이 문장을 나누는 방식(loadBookContent)과 똑같이 계산한다.
         // 줄바꿈 한 번(워드에서 그냥 줄만 바꾼 곳)은 문장이 끝난 걸로 보지 않고 띄어쓰기로 이어붙인다.
         // 줄바꿈이 두 번 이상(빈 줄, 진짜 문단 구분)일 때는 그대로 둬서 문단 구분이 유지되게 한다.
+        // "14." 처럼 숫자(+마침표/쉼표)만 달랑 있는 줄은 번호 표시이므로, 바로 뒤의 줄바꿈이
+        // 몇 번이든 상관없이 무조건 다음 줄에 붙인다 (워드에서 그 번호를 Enter로 쳤어도 적용됨).
         function collapseSoftLineBreaks(text) {
-            return text.replace(/(?<!\n)\n(?!\n)/g, ' ');
+            let t = text.replace(/(^|\n)[ \t]*([0-9]{1,4}[.,)]?)[ \t]*\n+(?=\S)/g, (m, p1, num) => `${p1}${num} `);
+            t = t.replace(/(?<!\n)\n(?!\n)/g, ' ');
+            return t;
         }
 
         function getSentenceSpans(text) {
