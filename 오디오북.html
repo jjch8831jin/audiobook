@@ -1536,14 +1536,34 @@ body.day-mode header.border-b {
             }, false);
         }
 
+        // mammoth의 convertToHtml 결과(문단은 <p>, 줄바꿈은 <br>)를 일반 텍스트로 바꾼다.
+        // <br>(워드 안에서 그냥 줄만 바꾼 곳)은 띄어쓰기로, 문단이 바뀐 곳은 줄바꿈으로 남겨서
+        // "건지려고" + "남조선"처럼 붙어있던 단어가 하나로 뭉쳐버리는 일이 없게 한다.
+        function docxHtmlToText(html) {
+            let t = html.replace(/<br\s*\/?>/gi, ' ');
+            t = t.replace(/<\/p>\s*<p[^>]*>/gi, '\n\n');
+            t = t.replace(/<[^>]+>/g, '');
+            const ta = document.createElement('textarea');
+            ta.innerHTML = t;
+            t = ta.value;
+            t = t.replace(/[ \t]+/g, ' ');
+            t = t.replace(/ *\n */g, '\n');
+            return t.trim();
+        }
+
+        function extractDocxText(arrayBuffer) {
+            return mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+                .then(result => docxHtmlToText(result.value));
+        }
+
         function readBookFileText(file) {
             return new Promise((resolve, reject) => {
                 if (file.name.endsWith('.docx')) {
                     const reader = new FileReader();
                     reader.onload = (evt) => {
                         if (!window.mammoth) { reject(new Error('Word 파서 라이브러리가 로드되지 않았습니다.')); return; }
-                        mammoth.extractRawText({ arrayBuffer: evt.target.result })
-                            .then(result => resolve(result.value.trim()))
+                        extractDocxText(evt.target.result)
+                            .then(text => resolve(text))
                             .catch(reject);
                     };
                     reader.onerror = () => reject(new Error('파일을 읽을 수 없습니다.'));
@@ -1638,9 +1658,8 @@ body.day-mode header.border-b {
                 reader.onload = function(evt) {
                     const arrayBuffer = evt.target.result;
                     if (window.mammoth) {
-                        mammoth.extractRawText({ arrayBuffer: arrayBuffer })
-                            .then(function(result) {
-                                const text = result.value.trim();
+                        extractDocxText(arrayBuffer)
+                            .then(function(text) {
                                 if (textInput) textInput.value = text;
                                 saveDraftToStorage(fileName, text);
                                 loadBookContent(fileName, text, true);
