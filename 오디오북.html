@@ -241,6 +241,10 @@ body.day-mode header.border-b {
 #status-text{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;line-height:1.5;height:4.5em;cursor:pointer;}
 #status-text.status-open{-webkit-line-clamp:unset;line-clamp:unset;height:auto;}
 </style>
+<style>
+/* 본문 문장 표시: 화면 폭에 맞춰 줄을 바꿀 때 단어 중간을 끊지 않고, 단어(어절) 단위로만 줄바꿈한다 */
+#sentence-list .sentence-item span.flex-1 { word-break: keep-all; overflow-wrap: break-word; }
+</style>
 </head>
 <body id="app-body" class="bg-stone-900 text-stone-100 min-h-screen flex flex-col font-sans transition-colors duration-500 selection:bg-blue-600 selection:text-white day-mode">
 
@@ -2569,9 +2573,17 @@ body.day-mode header.border-b {
 
         // ---- 그 자리에서 바로 수정 ----
         // 원고 원문에서 각 문장이 있는 위치를 앱이 문장을 나누는 방식(loadBookContent)과 똑같이 계산한다.
+        // 줄바꿈 한 번(워드에서 그냥 줄만 바꾼 곳)은 문장이 끝난 걸로 보지 않고 띄어쓰기로 이어붙인다.
+        // 줄바꿈이 두 번 이상(빈 줄, 진짜 문단 구분)일 때는 그대로 둬서 문단 구분이 유지되게 한다.
+        function collapseSoftLineBreaks(text) {
+            return text.replace(/(?<!\n)\n(?!\n)/g, ' ');
+        }
+
         function getSentenceSpans(text) {
             const spans = [];
-            const re = /(?<=[.?!])\s+|\n+/g;
+            // 줄바꿈 한 번(워드에서 그냥 줄만 바꾼 곳)은 문장이 끝난 걸로 보지 않고 이어서 본다.
+            // 줄바꿈이 두 번 이상(빈 줄, 진짜 문단 구분)일 때만 거기서 끊는다.
+            const re = /(?<=[.?!])\s+|\n{2,}/g;
             let last = 0, m;
             const push = (a, b) => {
                 const t = text.slice(a, b);
@@ -4797,7 +4809,7 @@ body.day-mode header.border-b {
             const titleEl = document.getElementById('current-book-title');
             if (titleEl) titleEl.textContent = title;
 
-            const rawSentences = text
+            const rawSentences = collapseSoftLineBreaks(text)
                 .split(/(?<=[.?!])\s+|\n+/)
                 .map(s => s.trim())
                 .filter(s => s.length > 0);
@@ -5008,7 +5020,7 @@ body.day-mode header.border-b {
             const titleEl = document.getElementById('current-book-title');
             if (titleEl) titleEl.textContent = title;
 
-            const rawSentences = text
+            const rawSentences = collapseSoftLineBreaks(text)
                 .split(/(?<=[.?!])\s+|\n+/)
                 .map(s => s.trim())
                 .filter(s => s.length > 0);
