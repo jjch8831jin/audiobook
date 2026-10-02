@@ -5388,8 +5388,7 @@ body.day-mode header.border-b {
             }
 
             const allModels = [
-                "gemini-2.5-flash-preview-tts",
-                "gemini-2.5-pro-preview-tts"
+                "gemini-2.5-flash-preview-tts"
             ];
             let lastErrorMsg = "";
 
@@ -7301,7 +7300,7 @@ body.day-mode header.border-b {
             if (list.length <= 1) return null;
 
             const currentId = getActiveApiKeyId();
-            const allModelsCount = 2; // gemini-2.5-flash-preview-tts, gemini-2.5-pro-preview-tts
+            const allModelsCount = 1; // gemini-2.5-flash-preview-tts
             // 아직 시도 안 했거나(기록 없음), 모델이 일부라도 남아있는 키를 찾는다.
             const candidate = list.find(k => {
                 if (k.id === currentId) return false;
