@@ -5379,6 +5379,7 @@ body.day-mode header.border-b {
                 .replace(/'/g, '&apos;');
         }
 
+        let lastGoogleQuotaDetail = ""; // 가장 최근에 구글이 보낸 하루 한도 오류 원문(어느 키·모델인지 포함)
         let dailyQuotaExhaustedByKey = {}; // { [키ID]: Set(오늘 한도를 다 쓴 모델들) } — 키를 자동으로 바꿔도 각 키의 기록이 서로 안 섞이게 따로 관리
 
         async function fetchGeminiAITTSAudio(text, preset, silent = false, shouldContinue = () => isPlaying) {
@@ -5388,7 +5389,8 @@ body.day-mode header.border-b {
             }
 
             const allModels = [
-                "gemini-2.5-flash-preview-tts"
+                "gemini-2.5-flash-preview-tts",
+                "gemini-2.5-pro-preview-tts"
             ];
             let lastErrorMsg = "";
 
@@ -5415,11 +5417,11 @@ body.day-mode header.border-b {
                         setStatus(`🔑 [${switched.label || '이전 키'}]의 오늘 한도를 다 써서, 등록해두신 다른 키로 자동 전환합니다.`);
                         continue;
                     }
-                    throw new Error("등록된 모든 API 키의 오늘 사용 한도를 다 썼습니다. 내일 다시 시도하거나 새 키를 등록해 주세요.");
+                    throw new Error("등록된 모든 API 키의 오늘 사용 한도를 다 썼습니다. 내일 다시 시도하거나 새 키를 등록해 주세요." + (lastGoogleQuotaDetail ? ` [구글이 보낸 원문: ${lastGoogleQuotaDetail}]` : ""));
                 }
 
                 attempt++;
-                const currentModel = modelsToTry[(attempt - 1) % modelsToTry.length];
+                const currentModel = modelsToTry[0]; // Flash가 우선, Flash가 오늘 한도를 다 쓴 키에서만 Pro로 넘어간다
 
                 if (attempt > MAX_ATTEMPTS) {
                     throw new Error(`AI 음성 연결 실패: ${lastErrorMsg || "알 수 없는 오류"}`);
@@ -5497,6 +5499,7 @@ body.day-mode header.border-b {
                     lastErrorMsg = err.message;
 
                     if (err.isDailyQuota) {
+                        lastGoogleQuotaDetail = `${err.model || currentModel} / ${err.message}`;
                         exhaustedForThisKey.add(err.model || currentModel);
                         const stillAvailable = allModels.filter(m => !exhaustedForThisKey.has(m));
                         if (stillAvailable.length > 0) {
@@ -7300,7 +7303,7 @@ body.day-mode header.border-b {
             if (list.length <= 1) return null;
 
             const currentId = getActiveApiKeyId();
-            const allModelsCount = 1; // gemini-2.5-flash-preview-tts
+            const allModelsCount = 2; // gemini-2.5-flash-preview-tts, gemini-2.5-pro-preview-tts
             // 아직 시도 안 했거나(기록 없음), 모델이 일부라도 남아있는 키를 찾는다.
             const candidate = list.find(k => {
                 if (k.id === currentId) return false;
