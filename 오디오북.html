@@ -6779,7 +6779,10 @@ body.day-mode header.border-b {
                 const title = document.getElementById('current-book-title').textContent;
                 localStorage.setItem('audiobook_last_title', title);
                 localStorage.setItem('audiobook_last_index', currentIndex.toString());
-                localStorage.setItem('audiobook_last_text', sentences.join("\n"));
+                // 이미 문장 단위로 쪼개놓은 걸 다시 이어붙여서 저장하면, 매번 열고 닫을 때마다
+                // 문장 경계가 조금씩 달라지며 내용이 변형되는 문제가 있었다. 따로 보관해둔
+                // 원본 그대로를 저장해서, 몇 번을 다시 열어도 항상 원본과 똑같이 유지되게 한다.
+                localStorage.setItem('audiobook_last_text', window.__currentBookText || sentences.join("\n"));
             } catch(e) {}
         }
 
