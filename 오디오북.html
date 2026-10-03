@@ -8160,6 +8160,8 @@ body.day-mode header.border-b {
                         isPlaying = false;
                         updatePlayIcon();
                         stopBGM();
+                        // 낭독이 끝났으니, "낭독중 줄이기"로 줄여뒀던 배경음악 볼륨을 평소 볼륨으로 되돌린다.
+                        unduckBGMAfterNarration();
                         renderMainAudioPlaylist();
                         // 재생이 완전히 끝났으므로, 방금 재생하던 파일의 속도(예: 0.95x) 표시를
                         // 다시 기본값 1.00x로 되돌린다.
