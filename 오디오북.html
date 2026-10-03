@@ -401,8 +401,31 @@ body.day-mode header.border-b {
 
                 <!-- 음성 생성 엔진: Google Cloud TTS는 안 쓰셔서 정리하고 Gemini만 사용 -->
 
+<!-- 받기/다운로드 형식(WAV·MP3)/폴더: 한 줄로 배치 -->
+                <div class="flex items-center gap-2 pt-2 border-t border-stone-800">
+                    <button onclick="downloadOrSaveAudiobook()" id="btn-download-audiobook" title="완성된 챕터를 파일로 저장" disabled class="flex-1 py-2 bg-stone-800 text-stone-600 border border-stone-700 rounded-xl text-[15px] font-bold transition flex items-center justify-center gap-1 active:scale-95 shadow cursor-not-allowed"><i class="fa-solid fa-download"></i><span>받기</span></button>
+                    <div class="flex items-center bg-stone-950 border border-stone-700 rounded-lg p-0.5 shrink-0">
+                        <button onclick="setDownloadFormat('wav')" id="btn-format-wav" class="px-2 py-1.5 rounded font-bold text-[15px] transition">WAV</button>
+                        <button onclick="setDownloadFormat('mp3')" id="btn-format-mp3" class="px-2 py-1.5 rounded font-bold text-[15px] transition">MP3</button>
+                    </div>
+                    <button onclick="chooseChapterDownloadFolder()" title="챕터 파일을 주로 저장하는 폴더를 지정해두면, 다운로드가 항상 그 폴더에서 시작됩니다" class="flex-1 py-2 bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-sky-300 border border-stone-700 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 text-[15px]">
+                        <i class="fa-solid fa-folder text-[13px]"></i><span>폴더</span>
+                    </button>
+                </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                    <div class="space-y-1">
+                        <label class="text-[15px] text-stone-500 font-semibold">챕터당 문장 수</label>
+                        <input type="number" id="chapter-size-input" value="80" min="10" max="500" step="10" onchange="onChapterSizeChange(this.value)" class="w-full bg-stone-950 border border-stone-700 rounded-lg px-2 py-1.5 text-[15px] text-stone-200 focus:outline-none focus:border-emerald-500/50">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[15px] text-stone-500 font-semibold">챕터 선택</label>
+                        <select id="chapter-select" onchange="selectChapter(this.value)" class="w-full bg-stone-950 border border-stone-700 rounded-lg px-2 py-1.5 text-[15px] text-stone-200 focus:outline-none focus:border-emerald-500/50"><option value="0">챕터 1 (1~80번 문장)</option><option value="1">챕터 2 (81~160번 문장)</option><option value="2">챕터 3 (161~219번 문장)</option></select>
+                    </div>
+                </div>
+
 <!-- 3. 성우 선택 UI -->
-                <div class="flex flex-col space-y-2 pt-2 border-t border-stone-800">
+                <div class="flex flex-col space-y-2">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center bg-stone-900 border border-stone-700 rounded-lg p-0.5 text-[15px]">
                             <button onclick="filterGender('all')" id="btn-gender-all" class="px-2.5 py-1 rounded font-bold bg-amber-500 text-white">전체</button>
@@ -422,32 +445,6 @@ body.day-mode header.border-b {
                     </div>
                 </div>
 
-<!-- 받기/폴더: 자주 안 건드리는 버튼이라, 재생 중 자주 쓰는 속도조절과 자리를 바꿔 위쪽으로 옮김 -->
-                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-stone-800">
-                    <button onclick="downloadOrSaveAudiobook()" id="btn-download-audiobook" title="완성된 챕터를 파일로 저장" disabled class="py-2 bg-stone-800 text-stone-600 border border-stone-700 rounded-xl text-[15px] font-bold transition flex items-center justify-center gap-1 active:scale-95 shadow cursor-not-allowed"><i class="fa-solid fa-download"></i><span>받기</span></button>
-                    <button onclick="chooseChapterDownloadFolder()" title="챕터 파일을 주로 저장하는 폴더를 지정해두면, 다운로드가 항상 그 폴더에서 시작됩니다" class="py-2 bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-sky-300 border border-stone-700 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 text-[15px]">
-                        <i class="fa-solid fa-folder text-[13px]"></i><span>폴더</span>
-                    </button>
-                </div>
-
-                    <div class="grid grid-cols-2 gap-2">
-                    <div class="space-y-1">
-                        <label class="text-[15px] text-stone-500 font-semibold">챕터당 문장 수</label>
-                        <input type="number" id="chapter-size-input" value="80" min="10" max="500" step="10" onchange="onChapterSizeChange(this.value)" class="w-full bg-stone-950 border border-stone-700 rounded-lg px-2 py-1.5 text-[15px] text-stone-200 focus:outline-none focus:border-emerald-500/50">
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-[15px] text-stone-500 font-semibold">챕터 선택</label>
-                        <select id="chapter-select" onchange="selectChapter(this.value)" class="w-full bg-stone-950 border border-stone-700 rounded-lg px-2 py-1.5 text-[15px] text-stone-200 focus:outline-none focus:border-emerald-500/50"><option value="0">챕터 1 (1~80번 문장)</option><option value="1">챕터 2 (81~160번 문장)</option><option value="2">챕터 3 (161~219번 문장)</option></select>
-                    </div>
-                </div>
-
-                <div class="flex items-center justify-end space-x-1.5">
-                    <span class="text-[15px] text-stone-500">다운로드 형식:</span>
-                    <div class="flex items-center bg-stone-950 border border-stone-700 rounded-lg p-0.5">
-                        <button onclick="setDownloadFormat('wav')" id="btn-format-wav" class="px-2 py-0.5 rounded font-bold text-[15px] transition">WAV</button>
-                        <button onclick="setDownloadFormat('mp3')" id="btn-format-mp3" class="px-2 py-0.5 rounded font-bold text-[15px] transition">MP3</button>
-                    </div>
-                </div>
                 <div class="grid grid-cols-3 gap-1.5">
                     <button onclick="generateChapterAudiobook()" id="btn-generate-audiobook" title="이 챕터 생성하기" class="py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-[15px] font-bold transition flex flex-col items-center justify-center gap-1 active:scale-95 shadow"><i class="fa-solid fa-wand-magic-sparkles"></i><span>챕터생성</span></button>
                     <button onclick="generateAllChaptersSequentially()" id="btn-generate-all-chapters" title="모든 챕터를 순서대로 한 번에 생성한 뒤, zip 파일 하나로 받습니다" class="py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-[15px] font-bold transition flex flex-col items-center justify-center gap-1 active:scale-95 shadow"><i class="fa-solid fa-layer-group"></i><span>전체(zip)</span></button>
