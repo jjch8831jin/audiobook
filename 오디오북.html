@@ -350,7 +350,7 @@ body.day-mode header.border-b {
 
             <div class="bg-stone-900/60 border border-stone-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 flex-1 h-[60vh] lg:h-[calc(100vh-10rem)] overflow-y-auto relative shadow-inner flex flex-col justify-start" id="reader-container">
                 <div id="reader-fullscreen-controls-bar">
-                    <div class="flex items-center gap-1 bg-stone-900 border border-stone-700 rounded-xl h-10 px-2 shrink-0" style="width: clamp(72px, 22vw, 160px);" title="진행 위치 (드래그해서 이동)">
+                    <div class="flex items-center gap-1 bg-stone-900 border border-stone-700 rounded-xl h-10 px-2 shrink-0" style="width: clamp(110px, 32vw, 260px);" title="진행 위치 (드래그해서 이동)">
                         <span id="main-audio-current-time-fs" class="text-[12px] text-stone-400 font-mono shrink-0">00:00</span>
                         <input type="range" id="main-audio-seek-slider-fs" min="0" max="100" value="0" step="0.1" oninput="seekMainAudio(this.value)" onchange="seekMainAudioCommit(this.value)" class="w-full h-1 bg-stone-700 rounded-lg appearance-none cursor-pointer accent-emerald-400" disabled>
                         <span id="main-audio-duration-time-fs" class="text-[12px] text-stone-400 font-mono shrink-0">00:00</span>
@@ -369,11 +369,6 @@ body.day-mode header.border-b {
                         <button onclick="adjustRate(-0.01)" title="속도 느리게" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">-</button>
                         <span id="rate-display-fs" class="font-mono font-bold text-base w-10 text-center text-white">1.00x</span>
                         <button onclick="adjustRate(0.01)" title="속도 빠르게" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
-                    </div>
-                    <div class="flex items-center bg-stone-900 rounded-xl h-10 px-1.5 space-x-1" style="border: 1px solid #a78bfa;" title="음성 톤 (음높이)">
-                        <button onclick="adjustPitch(-0.1)" title="음높이 낮게" class="w-7 h-7 rounded-md font-extrabold text-base text-black active:scale-95 shadow flex items-center justify-center" style="background-color: #8b5cf6;">-</button>
-                        <span id="pitch-display-fs" class="font-mono font-bold text-base w-10 text-center text-white">1.0</span>
-                        <button onclick="adjustPitch(0.1)" title="음높이 높게" class="w-7 h-7 rounded-md font-extrabold text-base text-black active:scale-95 shadow flex items-center justify-center" style="background-color: #8b5cf6;">+</button>
                     </div>
                     <div id="reader-fullscreen-font-controls" class="flex-row items-center bg-stone-800 border border-stone-700 rounded-full shadow-lg overflow-hidden">
                     <button onclick="adjustFullscreenFontSize(-1)" title="글자 작게" class="w-10 h-10 flex items-center justify-center hover:bg-amber-500 hover:text-stone-900 text-stone-300 active:scale-90 transition text-[16px]">
