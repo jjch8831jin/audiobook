@@ -350,6 +350,12 @@ body.day-mode header.border-b {
 
             <div class="bg-stone-900/60 border border-stone-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 flex-1 h-[60vh] lg:h-[calc(100vh-10rem)] overflow-y-auto relative shadow-inner flex flex-col justify-start" id="reader-container">
                 <div id="reader-fullscreen-controls-bar">
+                    <div class="flex items-center gap-1 bg-stone-900 border border-stone-700 rounded-xl h-10 px-2 shrink-0" style="width: clamp(72px, 22vw, 160px);" title="진행 위치 (드래그해서 이동)">
+                        <span id="main-audio-current-time-fs" class="text-[12px] text-stone-400 font-mono shrink-0">00:00</span>
+                        <input type="range" id="main-audio-seek-slider-fs" min="0" max="100" value="0" step="0.1" oninput="seekMainAudio(this.value)" onchange="seekMainAudioCommit(this.value)" class="w-full h-1 bg-stone-700 rounded-lg appearance-none cursor-pointer accent-emerald-400" disabled>
+                        <span id="main-audio-duration-time-fs" class="text-[12px] text-stone-400 font-mono shrink-0">00:00</span>
+                    </div>
+                    <div id="main-audio-seek-preview-fs" class="hidden absolute -translate-x-1/2 -translate-y-full bg-stone-950 border border-stone-700 text-[15px] text-stone-200 px-2 py-1 rounded-lg shadow-lg pointer-events-none z-10 font-mono"></div>
                     <button id="reader-fullscreen-play-btn" onclick="fullscreenPlay()" title="재생" class="items-center justify-center w-10 h-10 rounded-full bg-stone-800 hover:bg-emerald-500 hover:text-stone-900 text-emerald-300 border border-stone-700 shadow-lg active:scale-90 transition">
                     <i class="fa-solid fa-play text-lg"></i>
                 </button>
@@ -5379,7 +5385,6 @@ body.day-mode header.border-b {
                 .replace(/'/g, '&apos;');
         }
 
-        let lastGoogleQuotaDetail = ""; // 가장 최근에 구글이 보낸 하루 한도 오류 원문(어느 키·모델인지 포함)
         let dailyQuotaExhaustedByKey = {}; // { [키ID]: Set(오늘 한도를 다 쓴 모델들) } — 키를 자동으로 바꿔도 각 키의 기록이 서로 안 섞이게 따로 관리
 
         async function fetchGeminiAITTSAudio(text, preset, silent = false, shouldContinue = () => isPlaying) {
@@ -5417,11 +5422,11 @@ body.day-mode header.border-b {
                         setStatus(`🔑 [${switched.label || '이전 키'}]의 오늘 한도를 다 써서, 등록해두신 다른 키로 자동 전환합니다.`);
                         continue;
                     }
-                    throw new Error("등록된 모든 API 키의 오늘 사용 한도를 다 썼습니다. 내일 다시 시도하거나 새 키를 등록해 주세요." + (lastGoogleQuotaDetail ? ` [구글이 보낸 원문: ${lastGoogleQuotaDetail}]` : ""));
+                    throw new Error("등록된 모든 API 키의 오늘 사용 한도를 다 썼습니다. 내일 다시 시도하거나 새 키를 등록해 주세요.");
                 }
 
                 attempt++;
-                const currentModel = modelsToTry[0]; // Flash가 우선, Flash가 오늘 한도를 다 쓴 키에서만 Pro로 넘어간다
+                const currentModel = modelsToTry[(attempt - 1) % modelsToTry.length];
 
                 if (attempt > MAX_ATTEMPTS) {
                     throw new Error(`AI 음성 연결 실패: ${lastErrorMsg || "알 수 없는 오류"}`);
@@ -5499,7 +5504,6 @@ body.day-mode header.border-b {
                     lastErrorMsg = err.message;
 
                     if (err.isDailyQuota) {
-                        lastGoogleQuotaDetail = `${err.model || currentModel} / ${err.message}`;
                         exhaustedForThisKey.add(err.model || currentModel);
                         const stillAvailable = allModels.filter(m => !exhaustedForThisKey.has(m));
                         if (stillAvailable.length > 0) {
@@ -6385,15 +6389,28 @@ body.day-mode header.border-b {
             return { total, before, known, starts };
         }
 
+        // 평소 화면의 진행바와 전체화면 팝업의 진행바, 둘 중 어느 쪽이 움직이든
+        // 서로 같은 값으로 맞춰준다 (한쪽만 쓰는 사람이 더 많겠지만, 둘 다 항상 일치하게).
+        function syncSeekSliderPair(val) {
+            const a = document.getElementById('main-audio-seek-slider');
+            const b = document.getElementById('main-audio-seek-slider-fs');
+            if (a) a.value = val;
+            if (b) b.value = val;
+        }
+
         function seekMainAudio(val) {
+            syncSeekSliderPair(val);
             const tl = getQueueTimeline();
             if (tl && tl.known && tl.total > 0) {
                 // 여러 파일: 드래그하는 동안은 시간 표시만 바꾸고, 손을 떼면(seekMainAudioCommit) 실제로 이동한다.
                 seekDragging = true;
                 clearTimeout(seekDragTimer);
                 seekDragTimer = setTimeout(() => { seekDragging = false; }, 4000);
+                const label = formatClock((parseFloat(val) / 100) * tl.total);
                 const curEl = document.getElementById('main-audio-current-time');
-                if (curEl) curEl.textContent = formatClock((parseFloat(val) / 100) * tl.total);
+                const curElFs = document.getElementById('main-audio-current-time-fs');
+                if (curEl) curEl.textContent = label;
+                if (curElFs) curElFs.textContent = label;
                 return;
             }
             const abPlayer = document.getElementById('local-audiobook-audio');
@@ -6432,38 +6449,53 @@ body.day-mode header.border-b {
         function updateMainAudioSeekUI() {
             const abPlayer = document.getElementById('local-audiobook-audio');
             const slider = document.getElementById('main-audio-seek-slider');
+            const sliderFs = document.getElementById('main-audio-seek-slider-fs');
             const curEl = document.getElementById('main-audio-current-time');
+            const curElFs = document.getElementById('main-audio-current-time-fs');
             const durEl = document.getElementById('main-audio-duration-time');
-            if (!slider || !abPlayer) return;
+            const durElFs = document.getElementById('main-audio-duration-time-fs');
+            const sliders = [slider, sliderFs].filter(Boolean);
+            if (sliders.length === 0 || !abPlayer) return;
 
             const tl = getQueueTimeline();
             if (tl && tl.known && tl.total > 0 && abPlayer.duration && isFinite(abPlayer.duration)) {
-                slider.disabled = false;
+                sliders.forEach(s => s.disabled = false);
                 if (!seekDragging) {
                     const cur = tl.before + abPlayer.currentTime;
-                    slider.value = Math.min(100, (cur / tl.total) * 100);
-                    if (curEl) curEl.textContent = formatClock(cur);
+                    const ratio = Math.min(100, (cur / tl.total) * 100);
+                    sliders.forEach(s => s.value = ratio);
+                    const label = formatClock(cur);
+                    if (curEl) curEl.textContent = label;
+                    if (curElFs) curElFs.textContent = label;
                 }
-                if (durEl) durEl.textContent = formatClock(tl.total);
+                const durLabel = formatClock(tl.total);
+                if (durEl) durEl.textContent = durLabel;
+                if (durElFs) durElFs.textContent = durLabel;
                 return;
             }
 
             if (abPlayer.duration && isFinite(abPlayer.duration)) {
-                slider.disabled = false;
+                sliders.forEach(s => s.disabled = false);
                 const cur = Math.floor(abPlayer.currentTime);
                 const dur = Math.floor(abPlayer.duration);
                 const curM = Math.floor(cur / 60).toString().padStart(2, '0');
                 const curS = (cur % 60).toString().padStart(2, '0');
                 const durM = Math.floor(dur / 60).toString().padStart(2, '0');
                 const durS = (dur % 60).toString().padStart(2, '0');
-                if (curEl) curEl.textContent = `${curM}:${curS}`;
-                if (durEl) durEl.textContent = `${durM}:${durS}` + ((tl && !tl.known) ? ' …' : '');
-                slider.value = (abPlayer.currentTime / abPlayer.duration) * 100;
+                const curLabel = `${curM}:${curS}`;
+                const durLabel = `${durM}:${durS}` + ((tl && !tl.known) ? ' …' : '');
+                if (curEl) curEl.textContent = curLabel;
+                if (curElFs) curElFs.textContent = curLabel;
+                if (durEl) durEl.textContent = durLabel;
+                if (durElFs) durElFs.textContent = durLabel;
+                const ratio = (abPlayer.currentTime / abPlayer.duration) * 100;
+                sliders.forEach(s => s.value = ratio);
             } else {
-                slider.disabled = true;
-                slider.value = 0;
+                sliders.forEach(s => { s.disabled = true; s.value = 0; });
                 if (curEl) curEl.textContent = '00:00';
+                if (curElFs) curElFs.textContent = '00:00';
                 if (durEl) durEl.textContent = '00:00';
+                if (durElFs) durElFs.textContent = '00:00';
             }
         }
 
@@ -7864,13 +7896,15 @@ body.day-mode header.border-b {
             renderBookmarkList();
             updateReaderTitleCardPosition();
 
-            setupSeekBarPreview('main-audio-seek-slider', 'main-audio-seek-preview', (ratio) => {
+            const seekPreviewLabel = (ratio) => {
                 const tl = getQueueTimeline();
                 if (tl && tl.known && tl.total > 0) return formatClock(ratio * tl.total);
                 const abPlayer = document.getElementById('local-audiobook-audio');
                 if (!abPlayer || !abPlayer.duration || !isFinite(abPlayer.duration)) return null;
                 return formatSecondsAsMMSS(ratio * abPlayer.duration);
-            });
+            };
+            setupSeekBarPreview('main-audio-seek-slider', 'main-audio-seek-preview', seekPreviewLabel);
+            setupSeekBarPreview('main-audio-seek-slider-fs', 'main-audio-seek-preview-fs', seekPreviewLabel);
             setupSeekBarPreview('sentence-slider', 'sentence-slider-preview', (ratio) => {
                 if (sentences.length === 0) return null;
                 const idx = Math.min(sentences.length - 1, Math.floor(ratio * sentences.length));
