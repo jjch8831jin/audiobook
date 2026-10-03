@@ -573,9 +573,9 @@ body.day-mode header.border-b {
         <div class="space-y-1.5">
             <div class="flex justify-between text-[15px] text-stone-400">
                 <span><i class="fa-solid fa-sliders mr-1 text-purple-400"></i>배경음악 크기</span>
-                <span id="bgm-vol-text" class="font-mono">20%</span>
+                <span id="bgm-vol-text" class="font-mono">100%</span>
             </div>
-            <input type="range" id="bgm-vol-slider" min="0" max="1" step="0.01" value="0.2" oninput="updateBGMVolume(this.value)" class="w-full h-1.5 bg-stone-700 rounded-lg appearance-none cursor-pointer accent-purple-500">
+            <input type="range" id="bgm-vol-slider" min="0" max="1" step="0.01" value="1" oninput="updateBGMVolume(this.value)" class="w-full h-1.5 bg-stone-700 rounded-lg appearance-none cursor-pointer accent-purple-500">
         </div>
     </div>
 
@@ -686,7 +686,7 @@ body.day-mode header.border-b {
                                 <button onclick="playNextBGM()" title="다음 곡" class="w-6 h-6 rounded-md bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white flex items-center justify-center text-[15px] transition active:scale-90 border border-stone-700">
                                     <i class="fa-solid fa-forward-step"></i>
                                 </button>
-                                <button onclick="toggleBGMRepeat()" id="btn-bgm-repeat" title="반복: 전체 재생목록" class="w-6 h-6 rounded-md bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white flex items-center justify-center text-[15px] transition active:scale-90 border border-stone-700 relative text-amber-300 border-amber-500/50"><i class="fa-solid fa-repeat"></i></button>
+                                <button onclick="toggleBGMRepeat()" id="btn-bgm-repeat" title="반복: 없음" class="w-6 h-6 rounded-md bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white flex items-center justify-center text-[15px] transition active:scale-90 border border-stone-700 relative"><i class="fa-solid fa-repeat"></i></button>
                                 <button onclick="cycleBGMFadeMode()" id="btn-bgm-fade" title="페이드 모드" class="px-1.5 h-6 rounded-md bg-stone-800 hover:bg-stone-700 flex items-center justify-center text-[13px] font-bold transition active:scale-90 border border-stone-700 relative text-amber-300 border-amber-500/50 whitespace-nowrap"><i class="fa-solid fa-wave-square mr-1"></i><span id="btn-bgm-fade-label">인아웃</span></button>
                                 <div class="flex items-center bg-stone-800 border border-stone-700 rounded-md h-6 overflow-hidden">
                                     <span id="btn-bgm-fade-time-label" class="px-1.5 text-[13px] font-mono text-stone-300 select-none">1s</span>
@@ -1331,7 +1331,7 @@ body.day-mode header.border-b {
         let voices = [];
         
         let ttsVolume = 1.0;
-        let bgmVolume = 0.2;
+        let bgmVolume = 1.0;
         // (예전엔 배경음악 음원이 보통 내레이션보다 크게 녹음되어 있다는 이유로 45%까지만
         // 나가게 낮춰뒀었는데, 그래서 슬라이더를 100%로 올려도 소리가 작다는 의견이 있어
         // 이제 슬라이더 값을 그대로(최대 100%) 출력하도록 풀었다.)
@@ -1344,7 +1344,7 @@ body.day-mode header.border-b {
         // 배경음악(내 음악) 재생목록 상태
         let bgmPlaylist = [];         // [{ name, url }, ...]
         let bgmPlaylistIndex = -1;    // 현재 재생 중인 곡의 인덱스
-        let bgmRepeatMode = 'all';    // 'off' | 'all' | 'one'
+        let bgmRepeatMode = 'off';    // 'off' | 'all' | 'one'
         let bgmShuffle = false;       // 무작위 재생 여부
         let bgmShuffleHistory = [];   // 무작위 재생 시 중복 방지용 최근 재생 인덱스 기록
 
@@ -7255,7 +7255,7 @@ body.day-mode header.border-b {
 
         // 반복 모드: off(반복 없음) -> all(전체 반복) -> one(한 곡 반복) 순으로 순환
         function toggleBGMRepeat() {
-            const modes = ['all', 'one', 'off'];
+            const modes = ['off', 'all', 'one'];
             const nextIdx = (modes.indexOf(bgmRepeatMode) + 1) % modes.length;
             bgmRepeatMode = modes[nextIdx];
 
