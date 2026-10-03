@@ -6121,6 +6121,10 @@ body.day-mode header.border-b {
                 });
                 bgmActiveNodes = [];
             }
+            // 합성음(화이트노이즈 등)뿐 아니라, 사용자가 직접 올린 실제 배경음악(재생목록)도
+            // 낭독이 멈추는 시점에 같이 멈춰야 한다. 뚝 끊기지 않도록, 이미 있는 "정지" 버튼과
+            // 똑같이 설정해둔 페이드 아웃 시간을 그대로 적용해서 서서히 줄이며 멈춘다.
+            stopCustomAudio();
         }
 
         function updateTTSVolume(val) {
