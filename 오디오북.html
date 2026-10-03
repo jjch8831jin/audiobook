@@ -548,6 +548,21 @@ body.day-mode header.border-b {
                     <button type="button" id="btn-continuous-play" class="nb nb-toggle" onclick="resumeReadingProgress()" title="이어듣기" aria-label="이어듣기" aria-pressed="false"><i class="fa-solid fa-forward-fast"></i></button>
                 </div>
 
+                <div class="flex items-center gap-1.5 px-0.5">
+                    <button onclick="toggleBGMDuck()" id="btn-bgm-duck" title="낭독중 줄이기: 안 줄임" class="px-2 h-7 rounded-md bg-stone-800 hover:bg-stone-700 text-stone-400 flex items-center justify-center gap-1 text-[13px] font-bold transition active:scale-90 border border-stone-700 whitespace-nowrap"><i class="fa-solid fa-volume-low"></i><span id="btn-bgm-duck-label">낭독중 줄이기: 안 줄임</span></button>
+                    <div class="flex items-center bg-stone-800 border border-stone-700 rounded-md h-7 overflow-hidden">
+                        <span id="bgm-duck-volume-label" class="px-1.5 text-[13px] font-mono text-stone-300 select-none">20%</span>
+                        <div class="flex flex-col border-l border-stone-700">
+                            <button onclick="adjustBGMDuckVolume(5)" title="낭독 중 볼륨 높이기" class="w-5 h-3.5 flex items-center justify-center hover:bg-stone-700 text-stone-400 hover:text-white active:scale-90 transition leading-none">
+                                <i class="fa-solid fa-caret-up text-[10px]"></i>
+                            </button>
+                            <button onclick="adjustBGMDuckVolume(-5)" title="낭독 중 볼륨 낮추기" class="w-5 h-3.5 flex items-center justify-center hover:bg-stone-700 text-stone-400 hover:text-white active:scale-90 transition leading-none border-t border-stone-700">
+                                <i class="fa-solid fa-caret-down text-[10px]"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-2 gap-4 pt-2 border-t border-stone-800">
         <div class="space-y-1.5">
             <div class="flex justify-between text-[15px] text-stone-400">
@@ -681,18 +696,6 @@ body.day-mode header.border-b {
                                             <i class="fa-solid fa-caret-up text-[9px]"></i>
                                         </button>
                                         <button onclick="adjustBGMFadeDuration(-1)" title="페이드 시간 줄이기" class="w-4 h-3 flex items-center justify-center hover:bg-stone-700 text-stone-400 hover:text-white active:scale-90 transition leading-none border-t border-stone-700">
-                                            <i class="fa-solid fa-caret-down text-[9px]"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                <button onclick="toggleBGMDuck()" id="btn-bgm-duck" title="낭독 중 배경음악 자동으로 줄이기: 꺼짐" class="px-1.5 h-6 rounded-md bg-stone-800 hover:bg-stone-700 text-stone-400 flex items-center justify-center text-[13px] font-bold transition active:scale-90 border border-stone-700 whitespace-nowrap"><i class="fa-solid fa-volume-low mr-1"></i><span>낭독중 줄이기</span></button>
-                                <div class="flex items-center bg-stone-800 border border-stone-700 rounded-md h-6 overflow-hidden">
-                                    <span id="bgm-duck-volume-label" class="px-1.5 text-[13px] font-mono text-stone-300 select-none">20%</span>
-                                    <div class="flex flex-col border-l border-stone-700">
-                                        <button onclick="adjustBGMDuckVolume(5)" title="낭독 중 볼륨 높이기" class="w-4 h-3 flex items-center justify-center hover:bg-stone-700 text-stone-400 hover:text-white active:scale-90 transition leading-none">
-                                            <i class="fa-solid fa-caret-up text-[9px]"></i>
-                                        </button>
-                                        <button onclick="adjustBGMDuckVolume(-5)" title="낭독 중 볼륨 낮추기" class="w-4 h-3 flex items-center justify-center hover:bg-stone-700 text-stone-400 hover:text-white active:scale-90 transition leading-none border-t border-stone-700">
                                             <i class="fa-solid fa-caret-down text-[9px]"></i>
                                         </button>
                                     </div>
@@ -5934,7 +5937,7 @@ body.day-mode header.border-b {
             const player = getCustomAudioPlayer();
             player.src = cached.url;
             player.loop = true;
-            const targetVolume = getEffectiveBGMGain();
+            const targetVolume = getBGMTargetVolumeNow();
             const fadeInOn = bgmFadeMode === 'in' || bgmFadeMode === 'both';
             if (fadeInOn) {
                 player.volume = 0;
@@ -7027,16 +7030,25 @@ body.day-mode header.border-b {
 
         function updateBGMDuckUI() {
             const btn = document.getElementById('btn-bgm-duck');
-            const label = document.getElementById('bgm-duck-volume-label');
-            if (label) label.textContent = `${Math.round(bgmDuckVolume * 100)}%`;
+            const btnLabel = document.getElementById('btn-bgm-duck-label');
+            const volLabel = document.getElementById('bgm-duck-volume-label');
+            if (volLabel) volLabel.textContent = `${Math.round(bgmDuckVolume * 100)}%`;
+            const text = bgmDuckEnabled ? `낭독중 줄이기: 켜짐 (${Math.round(bgmDuckVolume * 100)}%)` : "낭독중 줄이기: 안 줄임";
+            if (btnLabel) btnLabel.textContent = text;
             if (btn) {
                 btn.className = bgmDuckEnabled
-                    ? "px-1.5 h-6 rounded-md bg-stone-800 hover:bg-stone-700 flex items-center justify-center text-[13px] font-bold transition active:scale-90 border border-stone-700 whitespace-nowrap text-amber-300 border-amber-500/50"
-                    : "px-1.5 h-6 rounded-md bg-stone-800 hover:bg-stone-700 text-stone-400 flex items-center justify-center text-[13px] font-bold transition active:scale-90 border border-stone-700 whitespace-nowrap";
-                btn.title = bgmDuckEnabled
-                    ? `낭독 중 배경음악 자동으로 줄이기: 켜짐 (낭독 중 ${Math.round(bgmDuckVolume * 100)}%)`
-                    : "낭독 중 배경음악 자동으로 줄이기: 꺼짐";
+                    ? "px-2 h-7 rounded-md bg-stone-800 hover:bg-stone-700 flex items-center justify-center gap-1 text-[13px] font-bold transition active:scale-90 border border-stone-700 whitespace-nowrap text-amber-300 border-amber-500/50"
+                    : "px-2 h-7 rounded-md bg-stone-800 hover:bg-stone-700 text-stone-400 flex items-center justify-center gap-1 text-[13px] font-bold transition active:scale-90 border border-stone-700 whitespace-nowrap";
+                btn.title = text;
             }
+        }
+
+        // 지금 이 순간 배경음악이 맞춰야 할 목표 볼륨. 낭독 중(더킹 켜짐)이면 "낭독 중 볼륨",
+        // 아니면 "배경음악 크기" 슬라이더의 평소 볼륨. 곡이 바뀌거나 새로 재생을 시작할 때
+        // 무조건 평소 볼륨으로 튀어 오르지 않도록, targetVolume을 구하는 모든 곳에서 이 함수를 쓴다.
+        function getBGMTargetVolumeNow() {
+            if (bgmDuckEnabled && isPlaying) return bgmDuckVolume;
+            return getEffectiveBGMGain();
         }
 
         // 낭독이 시작될 때 배경음악을 "낭독 중 볼륨"으로 줄인다.
@@ -7116,7 +7128,7 @@ body.day-mode header.border-b {
             const track = bgmPlaylist[index];
             const player = getCustomAudioPlayer();
             player.src = track.url;
-            const targetVolume = getEffectiveBGMGain();
+            const targetVolume = getBGMTargetVolumeNow();
             const fadeInOn = bgmFadeMode === 'in' || bgmFadeMode === 'both';
             player.volume = fadeInOn ? 0 : targetVolume; // 페이드 인이 켜져있으면 0에서 서서히 올라감
             player.currentTime = 0;
@@ -7146,7 +7158,7 @@ body.day-mode header.border-b {
                 playBGMPlaylistIndex(0, true);
                 return;
             }
-            const targetVolume = getEffectiveBGMGain();
+            const targetVolume = getBGMTargetVolumeNow();
             const fadeInOn = bgmFadeMode === 'in' || bgmFadeMode === 'both';
             if (fadeInOn) {
                 player.volume = 0;
