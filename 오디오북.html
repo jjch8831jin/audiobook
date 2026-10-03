@@ -5493,7 +5493,15 @@ body.day-mode header.border-b {
                     const part = candidate?.content?.parts?.find(p => p.inlineData && p.inlineData.mimeType && p.inlineData.mimeType.startsWith('audio/'));
                     const audioData = part?.inlineData?.data;
 
-                    if (!audioData) throw new Error("오디오 데이터 누락");
+                    if (!audioData) {
+                        // 왜 음성 데이터가 없었는지, 구글 응답에 남아있는 단서를 최대한 그러모아 같이 보여준다.
+                        const reasons = [];
+                        if (data?.promptFeedback?.blockReason) reasons.push(`요청 자체가 차단됨: ${data.promptFeedback.blockReason}`);
+                        if (candidate?.finishReason && candidate.finishReason !== 'STOP') reasons.push(`중단 사유: ${candidate.finishReason}`);
+                        if (!candidate) reasons.push('응답에 candidates가 비어있음');
+                        const detail = reasons.length > 0 ? reasons.join(' / ') : `원인 불명 (응답 일부: ${JSON.stringify(data).slice(0, 200)})`;
+                        throw new Error(`오디오 데이터 누락 — ${detail}`);
+                    }
 
                     startAudioContext();
                     const wavArrayBuf = await pcmToWavBuffer(audioData, 24000);
