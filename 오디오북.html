@@ -3107,7 +3107,8 @@ body.day-mode header.border-b {
             // (사라졌다 나타났다 하면 화면이 흔들려서, 숨기는 대신 눌러도 반응 없게만 막는다).
             if (isGeneratingAudiobook) {
                 btn.disabled = true;
-                btn.classList.add('opacity-60', 'cursor-not-allowed');
+                btn.classList.add('opacity-60');
+                btn.style.cursor = 'not-allowed';
                 cancelBtn.classList.remove('hidden');
                 progressWrap.classList.remove('hidden');
                 if (total) {
@@ -3122,7 +3123,8 @@ body.day-mode header.border-b {
                 cancelBtn.classList.add('hidden');
                 progressWrap.classList.add('hidden');
                 btn.disabled = false;
-                btn.classList.remove('opacity-60', 'cursor-not-allowed');
+                btn.classList.remove('opacity-60');
+                btn.style.cursor = '';
                 btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>챕터생성</span>`;
                 btn.onclick = () => generateChapterAudiobook();
             }
@@ -3280,10 +3282,16 @@ body.day-mode header.border-b {
             }
             if (!d || !Array.isArray(d.offsets) || d.offsets.length === 0) return null;
             const titleEl = document.getElementById('current-book-title');
+            // 문장 "번호"뿐 아니라 그 문장들의 실제 글자도 같이 담아둔다. 나중에 원고의
+            // 줄바꿈 처리 등이 바뀌어 번호가 밀리더라도, 글자가 그대로인 문장은 이 목록에서
+            // 찾아서 시간을 그대로 이어 쓸 수 있게 하기 위함 (v=2부터).
+            const texts = (typeof d.start === 'number' && typeof d.end === 'number')
+                ? sentences.slice(d.start, d.end).map(cleanTextForTTS)
+                : null;
             return {
-                v: 1, tool: 'audiobook-sync',
+                v: 2, tool: 'audiobook-sync',
                 title: titleEl ? titleEl.textContent : '',
-                chapterIndex, start: d.start, end: d.end, offsets: d.offsets,
+                chapterIndex, start: d.start, end: d.end, offsets: d.offsets, texts,
                 rate: d.rate || currentRate,
                 sentenceCount: sentences.length,
                 textHash: computeSentencesHash()
@@ -3373,23 +3381,64 @@ body.day-mode header.border-b {
             return null;
         }
 
+        // 번호(순서)가 예전과 달라졌어도, 저장해둔 "그 문장의 실제 글자" 목록에서 지금
+        // 문장과 똑같은 글자를 찾아 그 시간을 그대로 가져다 쓴다. 원고의 줄바꿈 처리 등이
+        // 바뀌어 번호만 밀린 경우, 다시 만들지 않아도 자동으로 맞춰지게 하기 위함.
+        // 순서는 대체로 유지된다고 보고, 바로 다음 몇 칸 안에서만 같은 글자를 찾는다.
+        function realignOffsetsByContent(p, curSentences, curStart, curEnd) {
+            const oldTexts = p.texts;
+            const oldOffsets = p.offsets;
+            if (!Array.isArray(oldTexts) || !Array.isArray(oldOffsets) || oldTexts.length !== oldOffsets.length || oldTexts.length === 0) return null;
+
+            const newOffsets = [];
+            let oldIdx = 0;
+            let matchedAny = false;
+            for (let i = curStart; i < curEnd; i++) {
+                const t = cleanTextForTTS(curSentences[i]);
+                let found = -1;
+                for (let d = 0; d < 8 && found === -1; d++) {
+                    const c1 = oldIdx + d, c2 = oldIdx - d;
+                    if (c1 < oldTexts.length && oldTexts[c1] === t) found = c1;
+                    else if (d > 0 && c2 >= 0 && oldTexts[c2] === t) found = c2;
+                }
+                if (found !== -1) {
+                    newOffsets.push(oldOffsets[found]);
+                    oldIdx = found + 1;
+                    matchedAny = true;
+                } else {
+                    // 못 찾으면 바로 전 시간을 그대로 씀 — 완벽친 않지만 어긋나는 정도가 작다.
+                    newOffsets.push(newOffsets.length > 0 ? newOffsets[newOffsets.length - 1] : (oldOffsets[0] || 0));
+                }
+            }
+            return matchedAny ? newOffsets : null;
+        }
+
         // 연결한 오디오가 지금 열린 원고와 같은 원고로 만들어진 것이면, 그 기록을 재생에 쓴다.
         function applyItemSync(item) {
             if (!item || !item.syncRaw) return false;
             if (!sentences || sentences.length === 0 || !currentBookId) return false;
             const p = item.syncRaw;
-            if (p.textHash !== computeSentencesHash() || p.sentenceCount !== sentences.length) {
-                setStatus('⚠️ 이 오디오의 문장 시간 기록은 다른(또는 고치기 전) 원고 기준이라 스크롤이 어긋날 수 있어요. 이 챕터를 다시 만들어 주세요.');
-                return false;
-            }
             const chIdx = (typeof p.chapterIndex === 'number') ? p.chapterIndex : currentChapterIndex;
+            const exactMatch = (p.textHash === computeSentencesHash() && p.sentenceCount === sentences.length);
+            let offsets = p.offsets;
+            if (!exactMatch) {
+                const ranges = getChapterRanges();
+                const range = ranges[chIdx] || { start: p.start || 0, end: p.end || sentences.length };
+                const realigned = realignOffsetsByContent(p, sentences, range.start, range.end);
+                if (!realigned) {
+                    setStatus('⚠️ 이 오디오의 문장 시간 기록은 다른(또는 고치기 전) 원고 기준이라 스크롤이 어긋날 수 있어요. 이 챕터를 다시 만들어 주세요.');
+                    return false;
+                }
+                offsets = realigned;
+                setStatus('🔧 원고가 조금 바뀌어서, 문장 내용으로 다시 맞춰 재생합니다 (다시 만들지 않아도 됩니다).');
+            }
             if (chIdx !== currentChapterIndex) {
                 currentChapterIndex = chIdx;
                 const chapterSelect = document.getElementById('chapter-select');
                 if (chapterSelect) chapterSelect.value = String(chIdx);
                 if (typeof refreshChapterProgressLabel === 'function') refreshChapterProgressLabel();
             }
-            sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chIdx, start: p.start, end: p.end, offsets: p.offsets, rate: p.rate };
+            sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chIdx, start: p.start, end: p.end, offsets, rate: p.rate };
             return true;
         }
 
@@ -7343,7 +7392,7 @@ body.day-mode header.border-b {
                         ? '<i class="fa-solid fa-volume-high mr-1 animate-pulse"></i>'
                         : '<i class="fa-solid fa-pause mr-1"></i>';
                 return `
-                    <div class="flex items-center justify-between gap-1.5 px-1.5 py-1 rounded-md ${isActive ? 'bg-purple-500/15 text-purple-300' : 'text-stone-400 hover:bg-stone-800/70 hover:text-stone-100'} transition group">
+                    <div class="flex items-center justify-between gap-1.5 px-1.5 py-1 rounded-md ${isActive ? 'bg-purple-500/15 text-purple-300' : 'text-stone-400 hover:bg-stone-800/70 hover:text-white'} transition group">
                         <span class="truncate text-[15px] cursor-pointer flex-1 ${isActive ? 'font-semibold' : ''}" onclick="playBGMPlaylistIndex(${i}, true)" title="${track.name}">
                             ${icon}${i + 1}. ${track.name}
                         </span>
@@ -8069,11 +8118,6 @@ body.day-mode header.border-b {
 
             selectBGMPreset('none');
             renderBGMPlaylist();
-            const repeatBtn = document.getElementById('btn-bgm-repeat');
-            if (repeatBtn) {
-                repeatBtn.title = '반복: 전체 재생목록';
-                repeatBtn.classList.add('text-amber-300', 'border-amber-500/50');
-            }
 
             initDragAndDrop();
             updateContinuousPlayButtonUI();
