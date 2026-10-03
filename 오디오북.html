@@ -351,9 +351,9 @@ body.day-mode header.border-b {
             <div class="bg-stone-900/60 border border-stone-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 flex-1 h-[60vh] lg:h-[calc(100vh-10rem)] overflow-y-auto relative shadow-inner flex flex-col justify-start" id="reader-container">
                 <div id="reader-fullscreen-controls-bar">
                     <div class="flex items-center gap-1 bg-stone-900 border border-stone-700 rounded-xl h-10 px-2 shrink-0" style="width: clamp(110px, 32vw, 260px);" title="진행 위치 (드래그해서 이동)">
-                        <span id="main-audio-current-time-fs" class="text-[12px] text-stone-400 font-mono shrink-0">00:00</span>
+                        <span id="main-audio-current-time-fs" class="font-mono font-bold text-base text-white shrink-0">00:00</span>
                         <input type="range" id="main-audio-seek-slider-fs" min="0" max="100" value="0" step="0.1" oninput="seekMainAudio(this.value)" onchange="seekMainAudioCommit(this.value)" class="w-full h-1 bg-stone-700 rounded-lg appearance-none cursor-pointer accent-emerald-400" disabled>
-                        <span id="main-audio-duration-time-fs" class="text-[12px] text-stone-400 font-mono shrink-0">00:00</span>
+                        <span id="main-audio-duration-time-fs" class="font-mono font-bold text-base text-white shrink-0">00:00</span>
                     </div>
                     <div id="main-audio-seek-preview-fs" class="hidden absolute -translate-x-1/2 -translate-y-full bg-stone-950 border border-stone-700 text-[15px] text-stone-200 px-2 py-1 rounded-lg shadow-lg pointer-events-none z-10 font-mono"></div>
                     <button id="reader-fullscreen-play-btn" onclick="fullscreenPlay()" title="재생" class="items-center justify-center w-10 h-10 rounded-full bg-stone-800 hover:bg-emerald-500 hover:text-stone-900 text-emerald-300 border border-stone-700 shadow-lg active:scale-90 transition">
