@@ -5999,7 +5999,7 @@ body.day-mode header.border-b {
         }
 
         function playBGM() {
-            stopBGM();
+            stopBGMSynthNodes();
             if (currentBGMPreset === 'none') return;
             startAudioContext();
             if (!audioCtx) return;
@@ -6107,7 +6107,10 @@ body.day-mode header.border-b {
             }
         }
 
-        function stopBGM() {
+        // 합성음(화이트노이즈·피아노음 같은 기본 제공 효과음) 노드만 정리한다.
+        // playBGM()이 "새 효과음을 틀기 전, 혹시 남아있는 예전 효과음부터 치운다"는 용도로
+        // 쓰는 함수라, 여기서는 사용자가 직접 올린 진짜 배경음악(재생목록)은 건드리지 않는다.
+        function stopBGMSynthNodes() {
             if (bgmIntervalId) {
                 clearInterval(bgmIntervalId);
                 bgmIntervalId = null;
@@ -6121,9 +6124,13 @@ body.day-mode header.border-b {
                 });
                 bgmActiveNodes = [];
             }
-            // 합성음(화이트노이즈 등)뿐 아니라, 사용자가 직접 올린 실제 배경음악(재생목록)도
-            // 낭독이 멈추는 시점에 같이 멈춰야 한다. 뚝 끊기지 않도록, 이미 있는 "정지" 버튼과
-            // 똑같이 설정해둔 페이드 아웃 시간을 그대로 적용해서 서서히 줄이며 멈춘다.
+        }
+
+        // 낭독이 실제로 멈출 때(정지/일시정지/다 읽음) 쓰는 함수. 효과음과 사용자의 실제
+        // 배경음악(재생목록)을 전부 같이 멈춘다. 뚝 끊기지 않도록, "정지" 버튼과 똑같이
+        // 설정해둔 페이드 아웃 시간을 그대로 적용해서 서서히 줄이며 멈춘다.
+        function stopBGM() {
+            stopBGMSynthNodes();
             stopCustomAudio();
         }
 
