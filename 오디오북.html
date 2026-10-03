@@ -5395,7 +5395,11 @@ body.day-mode header.border-b {
 
             const allModels = [
                 "gemini-2.5-flash-preview-tts",
-                "gemini-2.5-pro-preview-tts"
+                "gemini-2.5-pro-preview-tts",
+                // 2.5 TTS 모델들이 최근(2026-10-02 즈음부터) "응답은 오는데 음성 데이터가
+                // 비어있음(finishReason: OTHER)" 오류를 반복해서, 구글이 권장하는 신형
+                // TTS 모델도 같이 돌려본다. 요청 형식은 동일(모델 이름만 다름).
+                "gemini-3.1-flash-tts-preview"
             ];
             let lastErrorMsg = "";
 
@@ -5505,7 +5509,12 @@ body.day-mode header.border-b {
                     }
 
                     startAudioContext();
-                    const wavArrayBuf = await pcmToWavBuffer(audioData, 24000);
+                    // mimeType에 실제 샘플레이트가 적혀 있으면(예: "audio/L16;rate=24000") 그 값을
+                    // 쓰고, 없으면 기존처럼 24000을 기본값으로 쓴다. (신형 모델이 다른 레이트를
+                    // 쓸 경우에도 음정이 틀어지지 않도록 하는 안전장치)
+                    const rateMatch = /rate=(\d+)/.exec(part?.inlineData?.mimeType || '');
+                    const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
+                    const wavArrayBuf = await pcmToWavBuffer(audioData, sampleRate);
                     return await audioCtx.decodeAudioData(wavArrayBuf);
 
                 } catch (err) {
@@ -7419,7 +7428,7 @@ body.day-mode header.border-b {
             if (list.length <= 1) return null;
 
             const currentId = getActiveApiKeyId();
-            const allModelsCount = 2; // gemini-2.5-flash-preview-tts, gemini-2.5-pro-preview-tts
+            const allModelsCount = 3; // gemini-2.5-flash-preview-tts, gemini-2.5-pro-preview-tts, gemini-3.1-flash-tts-preview
             // 아직 시도 안 했거나(기록 없음), 모델이 일부라도 남아있는 키를 찾는다.
             const candidate = list.find(k => {
                 if (k.id === currentId) return false;
