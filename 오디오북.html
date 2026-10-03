@@ -2407,17 +2407,17 @@ body.day-mode header.border-b {
             return `${currentBookId}::${currentVoiceKey()}::${engineTag}::batch::v2::${bStart}-${bEnd}`;
         }
 
+        // "오타 수정 등 — 범위만 다시 만들기"는 전용 체크박스 UI 없이, "본문 찾기"에서
+        // 문장을 고르면 내부적으로(이 변수들로만) 켜고 범위를 기억한다.
         let customRangeEnabled = false;
+        let customRangeStart = null; // 1부터 시작하는 문장 번호
+        let customRangeEnd = null;
         function toggleCustomRange(checked) {
             customRangeEnabled = checked;
-            const box = document.getElementById('custom-range-inputs');
-            if (box) box.classList.toggle('hidden', !checked);
             updateFinderSelected();
             if (checked) {
-                const s = document.getElementById('custom-range-start');
-                const e = document.getElementById('custom-range-end');
-                if (s && !s.value) s.value = 1;
-                if (e && !e.value) e.value = Math.min(10, sentences.length);
+                if (customRangeStart == null) customRangeStart = 1;
+                if (customRangeEnd == null) customRangeEnd = Math.min(10, sentences.length);
             }
             resetGeneratedAudiobook();
         }
@@ -2460,13 +2460,11 @@ body.day-mode header.border-b {
         }
 
         function ensureCustomRangeOn() {
-            const cb = document.getElementById('custom-range-toggle');
-            if (cb && !cb.checked) { cb.checked = true; toggleCustomRange(true); }
+            if (!customRangeEnabled) toggleCustomRange(true);
         }
 
         function clearFinderRange() {
-            const cb = document.getElementById('custom-range-toggle');
-            if (cb && cb.checked) { cb.checked = false; toggleCustomRange(false); }
+            if (customRangeEnabled) toggleCustomRange(false);
             updateFinderSelected();
         }
 
@@ -2474,11 +2472,9 @@ body.day-mode header.border-b {
             const out = document.getElementById('finder-selected');
             const clearBtn = document.getElementById('finder-clear-btn');
             if (!out) return;
-            const sEl = document.getElementById('custom-range-start');
-            const eEl = document.getElementById('custom-range-end');
-            const sv = parseInt(sEl && sEl.value, 10);
-            const ev = parseInt(eEl && eEl.value, 10);
-            if (!customRangeEnabled || isNaN(sv) || isNaN(ev) || ev < sv) {
+            const sv = customRangeStart;
+            const ev = customRangeEnd;
+            if (!customRangeEnabled || sv == null || ev == null || ev < sv) {
                 out.textContent = '';
                 if (clearBtn) clearBtn.style.display = 'none';
                 return;
@@ -2494,16 +2490,13 @@ body.day-mode header.border-b {
 
         function setFinderRange(n, which) {
             ensureCustomRangeOn();
-            const sEl = document.getElementById('custom-range-start');
-            const eEl = document.getElementById('custom-range-end');
-            if (!sEl || !eEl) return;
-            let sv = parseInt(sEl.value, 10);
-            let ev = parseInt(eEl.value, 10);
+            let sv = customRangeStart;
+            let ev = customRangeEnd;
             if (which === 'both') { sv = n; ev = n; }
-            else if (which === 'start') { sv = n; if (isNaN(ev) || ev < n) ev = n; }
-            else if (which === 'end') { ev = n; if (isNaN(sv) || sv > n) sv = n; }
-            sEl.value = sv;
-            eEl.value = ev;
+            else if (which === 'start') { sv = n; if (ev == null || ev < n) ev = n; }
+            else if (which === 'end') { ev = n; if (sv == null || sv > n) sv = n; }
+            customRangeStart = sv;
+            customRangeEnd = ev;
             onCustomRangeChange();
         }
 
@@ -2824,10 +2817,10 @@ body.day-mode header.border-b {
         // 아니면 평소처럼 챕터 드롭다운에서 고른 챕터 범위를 쓴다.
         function getActiveGenerationRange() {
             if (customRangeEnabled) {
-                const s = parseInt(document.getElementById('custom-range-start')?.value, 10);
-                const e = parseInt(document.getElementById('custom-range-end')?.value, 10);
-                const start = Math.max(0, (isNaN(s) ? 1 : s) - 1);
-                const end = Math.min(sentences.length, isNaN(e) ? start + 1 : e);
+                const s = customRangeStart;
+                const e = customRangeEnd;
+                const start = Math.max(0, (s == null ? 1 : s) - 1);
+                const end = Math.min(sentences.length, e == null ? start + 1 : e);
                 if (end <= start) return { start: 0, end: Math.min(1, sentences.length) };
                 return { start, end };
             }
@@ -3110,20 +3103,26 @@ body.day-mode header.border-b {
 
             if (!btn) return;
 
+            // "챕터생성" 버튼은 생성 중에도 화면에서 사라지지 않고 계속 그 자리에 있는다
+            // (사라졌다 나타났다 하면 화면이 흔들려서, 숨기는 대신 눌러도 반응 없게만 막는다).
             if (isGeneratingAudiobook) {
-                btn.classList.add('hidden');
+                btn.disabled = true;
+                btn.classList.add('opacity-60', 'cursor-not-allowed');
                 cancelBtn.classList.remove('hidden');
                 progressWrap.classList.remove('hidden');
                 if (total) {
                     const pct = Math.round((current / total) * 100);
                     progressBar.style.width = `${pct}%`;
                     progressLabel.textContent = `${current} / ${total} 문장 생성 중... (${pct}%)`;
+                    btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>생성 중... ${pct}%</span>`;
+                } else {
+                    btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>생성 중...</span>`;
                 }
             } else {
                 cancelBtn.classList.add('hidden');
                 progressWrap.classList.add('hidden');
-                btn.classList.remove('hidden');
-                btn.className = "w-full py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-[15px] font-bold transition flex items-center justify-center space-x-1.5 active:scale-95 shadow";
+                btn.disabled = false;
+                btn.classList.remove('opacity-60', 'cursor-not-allowed');
                 btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>챕터생성</span>`;
                 btn.onclick = () => generateChapterAudiobook();
             }
@@ -3150,7 +3149,7 @@ body.day-mode header.border-b {
             const willUseMp3 = !customBlob && !isZip && downloadFormat === 'mp3';
             const ext = isZip ? 'zip' : (willUseMp3 ? 'mp3' : 'wav');
             const rangeLabel = customRangeEnabled
-                ? `${(document.getElementById('custom-range-start')?.value || 1)}-${(document.getElementById('custom-range-end')?.value || 1)}번 문장`
+                ? `${customRangeStart || 1}-${customRangeEnd || 1}번 문장`
                 : `챕터${currentChapterIndex + 1}`;
             const defaultFilename = customName || `${title} - ${rangeLabel}.${ext}`;
 
@@ -7344,7 +7343,7 @@ body.day-mode header.border-b {
                         ? '<i class="fa-solid fa-volume-high mr-1 animate-pulse"></i>'
                         : '<i class="fa-solid fa-pause mr-1"></i>';
                 return `
-                    <div class="flex items-center justify-between gap-1.5 px-1.5 py-1 rounded-md ${isActive ? 'bg-purple-500/15 text-purple-300' : 'text-stone-400 hover:bg-stone-800/70'} transition group">
+                    <div class="flex items-center justify-between gap-1.5 px-1.5 py-1 rounded-md ${isActive ? 'bg-purple-500/15 text-purple-300' : 'text-stone-400 hover:bg-stone-800/70 hover:text-stone-100'} transition group">
                         <span class="truncate text-[15px] cursor-pointer flex-1 ${isActive ? 'font-semibold' : ''}" onclick="playBGMPlaylistIndex(${i}, true)" title="${track.name}">
                             ${icon}${i + 1}. ${track.name}
                         </span>
