@@ -5404,6 +5404,7 @@ body.day-mode header.border-b {
 
             let attempt = 0;
             let rateLimitStreak = 0; // 같은 키에서 분당 한도(429)가 연달아 몇 번 걸렸는지
+            let otherErrorStreak = 0; // 한도 초과가 아닌 다른 오류가 같은 키에서 연달아 몇 번 났는지
             const keyCount = Math.max(1, getGeminiKeyList().length);
             const MAX_ATTEMPTS = allModels.length * 5 * keyCount;
 
@@ -5543,6 +5544,19 @@ body.day-mode header.border-b {
                         await new Promise(r => setTimeout(r, 15000));
                     } else {
                         rateLimitStreak = 0;
+                        // 한도 초과가 아닌 다른 오류(예: "오디오 데이터 누락")도, 같은 키로
+                        // 계속 실패하면 등록해둔 다른 키로 전환해본다. 그 키/프로젝트 쪽
+                        // 서버 상태와 관련 있을 수도 있어서, 무작정 같은 키만 두드리지 않는다.
+                        otherErrorStreak++;
+                        if (otherErrorStreak >= 3) {
+                            const switched = switchToNextAvailableApiKey();
+                            if (switched) {
+                                otherErrorStreak = 0;
+                                setStatus(`🔑 같은 오류가 계속 반복되어, [${switched.label || '다른 키'}]로 전환합니다. [${err.message}]`);
+                                if (!shouldContinue()) throw new Error("중단되었습니다.");
+                                continue;
+                            }
+                        }
                         setStatus(`⚠️ 실패: ${err.message} — 곧 재시도합니다.`);
                         if (!shouldContinue()) throw new Error("중단되었습니다.");
                         await new Promise(r => setTimeout(r, 1200));
