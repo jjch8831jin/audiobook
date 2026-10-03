@@ -422,32 +422,12 @@ body.day-mode header.border-b {
                     </div>
                 </div>
 
-<!-- 2. 조절 UI (속도/톤/수면타이머) -->
-                <div class="grid grid-cols-3 gap-2 pt-2 border-t border-stone-800">
-                    <div class="flex flex-col items-center bg-stone-900 border border-stone-700 rounded-xl p-1.5">
-                        <span class="text-[15px] text-amber-400 font-bold mb-1">속도 조절</span>
-                        <div class="flex items-center space-x-1 text-[15px]">
-                            <button onclick="adjustRate(-0.01)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">-</button>
-                            <span id="rate-display" class="font-mono font-bold text-base w-10 text-center text-white">1.00x</span>
-                            <button onclick="adjustRate(0.01)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
-                        </div>
-                    </div>
-                    <div class="flex flex-col items-center bg-stone-900 border border-stone-700 rounded-xl p-1.5">
-                        <span class="text-[15px] text-amber-400 font-bold mb-1">음성 톤 (음높이)</span>
-                        <div class="flex items-center space-x-1 text-[15px]">
-                            <button onclick="adjustPitch(-0.1)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">-</button>
-                            <span id="pitch-display" class="font-mono font-bold text-base w-10 text-center text-white">1.0</span>
-                            <button onclick="adjustPitch(0.1)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
-                        </div>
-                    </div>
-                    <div class="flex flex-col items-center bg-stone-950 border border-stone-700 rounded-xl p-1.5 justify-center relative shadow-inner space-y-1">
-                        <button onclick="toggleReaderFullscreen()" title="본문을 전체화면으로 열기 (스크롤 위치와 상관없이 여기서 바로 열림)" class="w-full flex items-center justify-center gap-1 bg-black hover:bg-stone-900 text-amber-300 font-semibold text-[15px] rounded-lg py-1 border border-stone-800 transition active:scale-95">
-                            <i class="fa-solid fa-expand"></i><span>본문 전체화면</span>
-                        </button>
-                        <div class="w-full flex items-center justify-center gap-1 bg-black text-stone-300 font-semibold text-[15px] rounded-lg py-1 border border-stone-800">
-                            <i class="fa-solid fa-font text-stone-500"></i><span id="total-char-count-display">0자</span>
-                        </div>
-                    </div>
+<!-- 받기/폴더: 자주 안 건드리는 버튼이라, 재생 중 자주 쓰는 속도조절과 자리를 바꿔 위쪽으로 옮김 -->
+                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-stone-800">
+                    <button onclick="downloadOrSaveAudiobook()" id="btn-download-audiobook" title="완성된 챕터를 파일로 저장" disabled class="py-2 bg-stone-800 text-stone-600 border border-stone-700 rounded-xl text-[15px] font-bold transition flex items-center justify-center gap-1 active:scale-95 shadow cursor-not-allowed"><i class="fa-solid fa-download"></i><span>받기</span></button>
+                    <button onclick="chooseChapterDownloadFolder()" title="챕터 파일을 주로 저장하는 폴더를 지정해두면, 다운로드가 항상 그 폴더에서 시작됩니다" class="py-2 bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-sky-300 border border-stone-700 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 text-[15px]">
+                        <i class="fa-solid fa-folder text-[13px]"></i><span>폴더</span>
+                    </button>
                 </div>
 
                     <div class="grid grid-cols-2 gap-2">
@@ -461,17 +441,6 @@ body.day-mode header.border-b {
                     </div>
                 </div>
 
-                <div class="space-y-1">
-                    <label class="flex items-center gap-1.5 text-[15px] text-stone-500 font-semibold cursor-pointer">
-                        <input type="checkbox" id="custom-range-toggle" onchange="toggleCustomRange(this.checked)" class="accent-emerald-500">
-                        <span>오타 수정 등 — 문장 번호로 직접 범위 지정해서 그 부분만 생성</span>
-                    </label>
-                    <div id="custom-range-inputs" class="hidden grid grid-cols-2 gap-2">
-                        <input type="number" id="custom-range-start" min="1" placeholder="시작 문장 번호" onchange="onCustomRangeChange()" class="w-full bg-stone-950 border border-stone-700 rounded-lg px-2 py-1.5 text-[15px] text-stone-200 focus:outline-none focus:border-emerald-500/50">
-                        <input type="number" id="custom-range-end" min="1" placeholder="끝 문장 번호" onchange="onCustomRangeChange()" class="w-full bg-stone-950 border border-stone-700 rounded-lg px-2 py-1.5 text-[15px] text-stone-200 focus:outline-none focus:border-emerald-500/50">
-                    </div>
-                </div>
-
                 <div class="flex items-center justify-end space-x-1.5">
                     <span class="text-[15px] text-stone-500">다운로드 형식:</span>
                     <div class="flex items-center bg-stone-950 border border-stone-700 rounded-lg p-0.5">
@@ -479,16 +448,10 @@ body.day-mode header.border-b {
                         <button onclick="setDownloadFormat('mp3')" id="btn-format-mp3" class="px-2 py-0.5 rounded font-bold text-[15px] transition">MP3</button>
                     </div>
                 </div>
-                <div class="grid grid-cols-4 gap-1.5">
+                <div class="grid grid-cols-3 gap-1.5">
                     <button onclick="generateChapterAudiobook()" id="btn-generate-audiobook" title="이 챕터 생성하기" class="py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-[15px] font-bold transition flex flex-col items-center justify-center gap-1 active:scale-95 shadow"><i class="fa-solid fa-wand-magic-sparkles"></i><span>챕터생성</span></button>
                     <button onclick="generateAllChaptersSequentially()" id="btn-generate-all-chapters" title="모든 챕터를 순서대로 한 번에 생성한 뒤, zip 파일 하나로 받습니다" class="py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-[15px] font-bold transition flex flex-col items-center justify-center gap-1 active:scale-95 shadow"><i class="fa-solid fa-layer-group"></i><span>전체(zip)</span></button>
                     <button onclick="playChapterProgressively()" id="btn-progressive-play" title="다운로드/전체 생성을 기다리지 않고, 만들어지는 대로 바로 이어서 재생합니다" class="py-2 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded-xl text-[15px] font-bold transition flex flex-col items-center justify-center gap-1 active:scale-95 shadow"><i class="fa-solid fa-headphones"></i><span>바로듣기</span></button>
-                    <div class="grid grid-rows-2 gap-1">
-                        <button onclick="downloadOrSaveAudiobook()" id="btn-download-audiobook" title="완성된 챕터를 파일로 저장" disabled class="py-1 bg-stone-800 text-stone-600 border border-stone-700 rounded-xl text-[15px] font-bold transition flex items-center justify-center gap-1 active:scale-95 shadow cursor-not-allowed"><i class="fa-solid fa-download"></i><span>받기</span></button>
-                        <button onclick="chooseChapterDownloadFolder()" title="챕터 파일을 주로 저장하는 폴더를 지정해두면, 다운로드가 항상 그 폴더에서 시작됩니다" class="py-1 bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-sky-300 border border-stone-700 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 text-[15px]">
-                            <i class="fa-solid fa-folder text-[13px]"></i><span>폴더</span>
-                        </button>
-                    </div>
                 </div>
                 <div class="space-y-2 pt-2 border-t border-stone-800">
 
@@ -526,6 +489,34 @@ body.day-mode header.border-b {
                 </div>
 
                 
+
+      <!-- 속도·음높이 조절: 재생기 바로 위로 옮겨서, 재생 중 스크롤 없이 바로 조절할 수 있게 함 -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="flex flex-col items-center bg-stone-900 border border-stone-700 rounded-xl p-1.5">
+                        <span class="text-[15px] text-amber-400 font-bold mb-1">속도 조절</span>
+                        <div class="flex items-center space-x-1 text-[15px]">
+                            <button onclick="adjustRate(-0.01)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">-</button>
+                            <span id="rate-display" class="font-mono font-bold text-base w-10 text-center text-white">1.00x</span>
+                            <button onclick="adjustRate(0.01)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center bg-stone-900 border border-stone-700 rounded-xl p-1.5">
+                        <span class="text-[15px] text-amber-400 font-bold mb-1">음성 톤 (음높이)</span>
+                        <div class="flex items-center space-x-1 text-[15px]">
+                            <button onclick="adjustPitch(-0.1)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">-</button>
+                            <span id="pitch-display" class="font-mono font-bold text-base w-10 text-center text-white">1.0</span>
+                            <button onclick="adjustPitch(0.1)" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center bg-stone-950 border border-stone-700 rounded-xl p-1.5 justify-center relative shadow-inner space-y-1">
+                        <button onclick="toggleReaderFullscreen()" title="본문을 전체화면으로 열기 (스크롤 위치와 상관없이 여기서 바로 열림)" class="w-full flex items-center justify-center gap-1 bg-black hover:bg-stone-900 text-amber-300 font-semibold text-[15px] rounded-lg py-1 border border-stone-800 transition active:scale-95">
+                            <i class="fa-solid fa-expand"></i><span>본문 전체화면</span>
+                        </button>
+                        <div class="w-full flex items-center justify-center gap-1 bg-black text-stone-300 font-semibold text-[15px] rounded-lg py-1 border border-stone-800">
+                            <i class="fa-solid fa-font text-stone-500"></i><span id="total-char-count-display">0자</span>
+                        </div>
+                    </div>
+                </div>
 
       <!-- [수정된 전체 컨트롤러 블록] -->
 <div id="sentence-control-card" class="bg-stone-900/60 border border-stone-800/80 rounded-xl p-2.5 space-y-2 shadow">
