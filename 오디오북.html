@@ -5282,6 +5282,23 @@ body.day-mode header.border-b {
             saveReadingProgress();
         }
 
+        // 본문 클릭으로 이동한 직후에는 잠깐(0.8초) 재생 위치 기반 문장 갱신을 멈춰서, 이동 직후의
+        // 옛 위치 값이 방금 고른 문장을 되돌려 놓지 않게 한다. 또 이동이 끝난 뒤 실제 위치가
+        // 목표와 1초 넘게 다르면(브라우저가 정확히 못 찾아갔을 때) 한 번 더 이동한다.
+        let jumpLockUntil = 0;
+        function seekAudioForJump(abPlayer, target) {
+            jumpLockUntil = Date.now() + 800;
+            abPlayer.currentTime = target;
+            const onSeeked = () => {
+                abPlayer.removeEventListener('seeked', onSeeked);
+                if (Math.abs(abPlayer.currentTime - target) > 1.0) {
+                    abPlayer.currentTime = target;
+                }
+                jumpLockUntil = Date.now() + 500;
+            };
+            abPlayer.addEventListener('seeked', onSeeked);
+        }
+
         function jumpToSentence(idx) {
             if (idx >= 0 && idx < sentences.length) {
                 currentIndex = idx;
@@ -5297,10 +5314,10 @@ body.day-mode header.border-b {
                             od.end <= sentences.length &&
                             idx >= od.start && idx < od.end) {
                             const rate = od.rate || currentRate || 1;
-                            abPlayer.currentTime = Math.min(abPlayer.duration, od.offsets[idx - od.start] / rate + 0.02);
+                            seekAudioForJump(abPlayer, Math.min(abPlayer.duration, od.offsets[idx - od.start] / rate + 0.02));
                         } else {
                             const ratio = idx / sentences.length;
-                            abPlayer.currentTime = ratio * abPlayer.duration;
+                            seekAudioForJump(abPlayer, ratio * abPlayer.duration);
                         }
                     }
                 }
@@ -8164,6 +8181,7 @@ body.day-mode header.border-b {
                 abPlayer.ontimeupdate = () => {
                     updateMainAudioSeekUI();
                     if (!isFullAudioMode) return;
+                    if (Date.now() < jumpLockUntil) return;
                     if (abPlayer.duration && sentences.length > 0) {
                         let estimatedIndex;
                         const offsetData = ensureSentenceTimeOffsetsLoaded();
