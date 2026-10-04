@@ -5289,8 +5289,19 @@ body.day-mode header.border-b {
                 if (isFullAudioMode) {
                     const abPlayer = document.getElementById('local-audiobook-audio');
                     if (abPlayer && abPlayer.duration && sentences.length > 0) {
-                        const ratio = idx / sentences.length;
-                        abPlayer.currentTime = ratio * abPlayer.duration;
+                        // 문장별 시작 시간 기록이 있으면 그걸로 정확히 이동한다 (재생 중 위치 표시와 같은 기준).
+                        // 없으면(직접 올린 음원 등) 예전처럼 비율로 대략 이동한다.
+                        const od = ensureSentenceTimeOffsetsLoaded();
+                        if (od && Array.isArray(od.offsets) &&
+                            od.offsets.length === (od.end - od.start) &&
+                            od.end <= sentences.length &&
+                            idx >= od.start && idx < od.end) {
+                            const rate = od.rate || currentRate || 1;
+                            abPlayer.currentTime = Math.min(abPlayer.duration, od.offsets[idx - od.start] / rate + 0.02);
+                        } else {
+                            const ratio = idx / sentences.length;
+                            abPlayer.currentTime = ratio * abPlayer.duration;
+                        }
                     }
                 }
 
