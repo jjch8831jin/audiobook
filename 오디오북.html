@@ -5228,8 +5228,27 @@ body.day-mode header.border-b {
         // "실제로 보이는 영역"의 한가운데에 오도록 직접 계산해서 스크롤한다.
         // (그냥 scrollIntoView의 '가운데'는 고정 오버레이를 모르기 때문에, 그만큼
         // 문장이 위로 치우쳐 보이는 문제가 있었다.)
+        // 마우스를 본문 위에서 움직이는 중(마지막 움직임 후 1.2초 이내)에는 자동 스크롤을 잠깐 미룬다.
+        // 글이 움직이는 동안 클릭하면 겨냥한 문단이 아니라 다른 문단이 눌리기 때문이다.
+        // 마우스가 멈추면(1.2초 뒤) 평소처럼 현재 문장을 가운데로 따라간다.
+        let lastPointerMoveOverText = 0;
+        let scrollDeferTimer = null;
+        document.addEventListener('pointermove', (e) => {
+            if (e.pointerType === 'touch') return;
+            const t = e.target;
+            if (t && t.closest && t.closest('#sentence-list')) lastPointerMoveOverText = Date.now();
+        }, { passive: true });
+
         function scrollSentenceToCenter(el) {
             if (!el) return;
+            const sinceMove = Date.now() - lastPointerMoveOverText;
+            if (sinceMove < 1200) {
+                clearTimeout(scrollDeferTimer);
+                scrollDeferTimer = setTimeout(() => {
+                    scrollSentenceToCenter(document.getElementById(`sentence-${currentIndex}`));
+                }, 1200 - sinceMove + 50);
+                return;
+            }
 
             // 전체화면 팝업 안에서는 "페이지 전체"가 아니라, 그 박스(reader-container) 자신의
             // 스크롤 위치를 직접 움직여야 한다 — 그 박스가 화면을 통째로 덮고 있어서
@@ -5282,25 +5301,107 @@ body.day-mode header.border-b {
             saveReadingProgress();
         }
 
-        // 본문 클릭으로 이동한 직후에는 잠깐(0.8초) 재생 위치 기반 문장 갱신을 멈춰서, 이동 직후의
-        // 옛 위치 값이 방금 고른 문장을 되돌려 놓지 않게 한다. 또 이동이 끝난 뒤 실제 위치가
-        // 목표와 1초 넘게 다르면(브라우저가 정확히 못 찾아갔을 때) 한 번 더 이동한다.
+        // ===== 본문 클릭 → 음성 위치 이동 =====
+        // 파일 안의 "문장별 시작 시간"(od.offsets, 속도 1.0x 기준)으로 재생 위치(파일 시간)를 문장 번호로 바꾼다.
+        // 재생 중 자막 갱신(ontimeupdate)과 똑같은 계산이다.
+        function sentenceIndexAtFileTime(od, fileTime) {
+            const t = fileTime * (od.rate || currentRate);
+            const offs = od.offsets;
+            let lo = 0, hi = offs.length - 1, found = 0;
+            while (lo <= hi) {
+                const mid = (lo + hi) >> 1;
+                if (offs[mid] <= t) { found = mid; lo = mid + 1; }
+                else hi = mid - 1;
+            }
+            return od.start + found;
+        }
+
+        // 그 문장의 시작 시간으로 이동할 때, 정확히 경계에 맞추면 MP3 디코더가 몇십ms 앞에서 시작해서
+        // 바로 앞 문장으로 표시될 수 있다. 그래서 문장 안쪽으로 살짝(최대 0.06초) 들어간 지점을 고른다.
+        function pickSeekTimeForSentence(od, idx, duration) {
+            const rate = od.rate || currentRate || 1;
+            const i = idx - od.start;
+            const lo = od.offsets[i] / rate;
+            const hi = (i + 1 < od.offsets.length) ? od.offsets[i + 1] / rate : (isFinite(duration) ? duration : lo + 1);
+            const margin = Math.max(0, Math.min(0.06, (hi - lo) * 0.4));
+            return Math.min(isFinite(duration) ? duration : Infinity, lo + margin);
+        }
+
+        // 이동 직후 0.8초 동안은 재생 위치로 문장을 다시 계산하는 걸 멈춰서(jumpLockUntil), 이동 직전의 옛 위치 값이
+        // 방금 고른 문장을 되돌려 놓지 않게 한다. 이동이 끝나면 실제 위치가 목표 문장에 맞는지 확인하고,
+        // 틀리면 최대 3번까지 다시 맞춘다. 연속 클릭하면 앞 클릭의 확인 작업은 취소된다(jumpSeq).
         let jumpLockUntil = 0;
-        function seekAudioForJump(abPlayer, target) {
+        let jumpSeq = 0;
+        function seekAudioForJump(abPlayer, target, check) {
+            const mySeq = ++jumpSeq;
             jumpLockUntil = Date.now() + 800;
-            abPlayer.currentTime = target;
+            let attempts = 0;
             const onSeeked = () => {
-                abPlayer.removeEventListener('seeked', onSeeked);
-                if (Math.abs(abPlayer.currentTime - target) > 1.0) {
-                    abPlayer.currentTime = target;
+                if (mySeq !== jumpSeq) { abPlayer.removeEventListener('seeked', onSeeked); return; }
+                const farOff = Math.abs(abPlayer.currentTime - target) > 1.0;
+                const wrong = !!(check && check.od && sentenceIndexAtFileTime(check.od, abPlayer.currentTime) !== check.idx);
+                if ((farOff || wrong) && attempts < 3) {
+                    attempts++;
+                    jumpLockUntil = Date.now() + 800;
+                    abPlayer.currentTime = target + (wrong ? 0.04 * attempts : 0);
+                    return;
                 }
+                abPlayer.removeEventListener('seeked', onSeeked);
                 jumpLockUntil = Date.now() + 500;
+                updateMainAudioSeekUI();
             };
             abPlayer.addEventListener('seeked', onSeeked);
+            abPlayer.currentTime = target;
+            updateMainAudioSeekUI();
+        }
+
+        // 클릭한 문장이 지금 재생 중인 파일의 범위 밖이면, 그 문장이 들어있는 챕터 파일을 찾아
+        // 그 파일로 바꾼 뒤 해당 위치로 이동한다. 처리했으면 true, 아니면 false(기존 방식으로 계속).
+        function tryJumpAcrossFiles(idx) {
+            if (!isFullAudioMode) return false;
+            const abPlayer = document.getElementById('local-audiobook-audio');
+            if (!abPlayer) return false;
+            const od = ensureSentenceTimeOffsetsLoaded();
+            const odValid = od && Array.isArray(od.offsets) && od.offsets.length === (od.end - od.start) && od.end <= sentences.length;
+            if (!odValid || (idx >= od.start && idx < od.end)) return false;
+
+            let qi = -1;
+            for (let i = 0; i < localAudioQueue.length; i++) {
+                const p = localAudioQueue[i] && localAudioQueue[i].syncRaw;
+                if (p && typeof p.start === 'number' && typeof p.end === 'number' && idx >= p.start && idx < p.end) { qi = i; break; }
+            }
+            if (qi === -1) {
+                setStatus('⚠️ 이 문단의 음성 파일이 연결되어 있지 않습니다. (해당 챕터 파일을 파일 연동으로 추가해 주세요)');
+                return true;
+            }
+            const wasPlaying = isPlaying;
+            jumpLockUntil = Date.now() + 3000;
+            if (qi !== localAudioQueueIndex) {
+                loadLocalAudioQueueIndex(qi, false);
+            }
+            currentIndex = idx;
+            highlightCurrentSentence();
+            const doSeek = () => {
+                const od2 = ensureSentenceTimeOffsetsLoaded();
+                if (od2 && Array.isArray(od2.offsets) && idx >= od2.start && idx < od2.end && od2.offsets.length === (od2.end - od2.start)) {
+                    seekAudioForJump(abPlayer, pickSeekTimeForSentence(od2, idx, abPlayer.duration), { od: od2, idx });
+                }
+                currentIndex = idx;
+                highlightCurrentSentence();
+                if (wasPlaying) { abPlayer.play().then(() => { isPlaying = true; updatePlayIcon(); }).catch(() => {}); }
+            };
+            if (qi === localAudioQueueIndex && abPlayer.readyState >= 1 && abPlayer.duration) {
+                doSeek();
+            } else {
+                abPlayer.addEventListener('loadedmetadata', doSeek, { once: true });
+            }
+            return true;
         }
 
         function jumpToSentence(idx) {
             if (idx >= 0 && idx < sentences.length) {
+                lastPointerMoveOverText = 0; // 클릭으로 이동한 문장은 지연 없이 바로 가운데로
+                if (tryJumpAcrossFiles(idx)) return;
                 currentIndex = idx;
                 
                 if (isFullAudioMode) {
@@ -5313,8 +5414,7 @@ body.day-mode header.border-b {
                             od.offsets.length === (od.end - od.start) &&
                             od.end <= sentences.length &&
                             idx >= od.start && idx < od.end) {
-                            const rate = od.rate || currentRate || 1;
-                            seekAudioForJump(abPlayer, Math.min(abPlayer.duration, od.offsets[idx - od.start] / rate + 0.02));
+                            seekAudioForJump(abPlayer, pickSeekTimeForSentence(od, idx, abPlayer.duration), { od, idx });
                         } else {
                             const ratio = idx / sentences.length;
                             seekAudioForJump(abPlayer, ratio * abPlayer.duration);
@@ -8194,15 +8294,8 @@ body.day-mode header.border-b {
                             // 저장해둔 문장별 시간은 "속도 1.0x 기준"으로 기록되어 있는데, 실제
                             // 재생 파일은 다운로드할 때의 속도(currentRate)로 늘어나거나 줄어들어
                             // 있다. 그래서 지금 재생 위치를 다시 1.0x 기준 시간으로 환산해서 비교한다.
-                            const t = abPlayer.currentTime * (offsetData.rate || currentRate);
-                            const offs = offsetData.offsets;
-                            let lo = 0, hi = offs.length - 1, found = 0;
-                            while (lo <= hi) {
-                                const mid = (lo + hi) >> 1;
-                                if (offs[mid] <= t) { found = mid; lo = mid + 1; }
-                                else hi = mid - 1;
-                            }
-                            estimatedIndex = offsetData.start + found;
+                            // (위의 환산·검색은 sentenceIndexAtFileTime 함수로 옮겨 두었다 — 본문 클릭 이동도 같은 계산을 쓴다)
+                            estimatedIndex = sentenceIndexAtFileTime(offsetData, abPlayer.currentTime);
                         } else {
                             // 문장별 시간 정보가 없는 파일(직접 업로드한 음원 등)은
                             // 예전처럼 균등 분배로 대략 추정한다.
