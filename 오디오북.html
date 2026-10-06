@@ -393,7 +393,8 @@ body.day-mode header.border-b {
                         <span id="rate-display-fs" class="font-mono font-bold text-base w-10 text-center text-white">1.00x</span>
                         <button onclick="adjustRate(0.01)" title="속도 빠르게" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
                     </div>
-                    <div id="reader-fullscreen-font-controls" class="flex-row items-center bg-stone-800 border border-stone-700 rounded-full shadow-lg overflow-hidden">
+                    <button id="reader-fullscreen-find-btn" onclick="toggleFindPanel()" title="본문에서 단어·문장 찾기" class="flex items-center justify-center w-10 h-10 rounded-full bg-stone-800 hover:bg-sky-500 hover:text-stone-900 text-sky-300 border border-stone-700 shadow-lg active:scale-90 transition"><i class="fa-solid fa-magnifying-glass text-lg"></i></button>
+                <div id="reader-fullscreen-font-controls" class="flex-row items-center bg-stone-800 border border-stone-700 rounded-full shadow-lg overflow-hidden">
                     <button onclick="adjustFullscreenFontSize(-1)" title="글자 작게" class="w-10 h-10 flex items-center justify-center hover:bg-amber-500 hover:text-stone-900 text-stone-300 active:scale-90 transition text-[16px]">
                         <i class="fa-solid fa-minus"></i>
                     </button>
@@ -2449,15 +2450,25 @@ body.day-mode header.border-b {
         function positionFindPanel() {
             const panel = document.getElementById('find-panel');
             if (!panel || panel.classList.contains('hidden')) return;
-            const card = document.getElementById('reader-title-card');
-            let r = card ? card.getBoundingClientRect() : null;
-            if (!r || r.width < 50) r = { bottom: 56, left: 8, width: window.innerWidth - 16 };
+            // 대본 전체화면일 때는 본문 박스가 화면을 통째로 덮고(층 200) 제목 카드도 가려지므로,
+            // 찾기 창을 그 위층(205)에, 오른쪽 위 버튼 줄 아래에 띄운다.
+            let fsOpen = false;
+            try { fsOpen = !!isReaderFullscreen; } catch (e) {}
+            let r;
+            if (fsOpen) {
+                const w = Math.min(window.innerWidth - 16, 760);
+                r = { bottom: 56, left: Math.max(8, (window.innerWidth - w) / 2), width: w };
+            } else {
+                const card = document.getElementById('reader-title-card');
+                r = card ? card.getBoundingClientRect() : null;
+                if (!r || r.width < 50) r = { bottom: 56, left: 8, width: window.innerWidth - 16 };
+            }
             const top = Math.max(8, r.bottom + 6);
             panel.style.position = 'fixed';
             panel.style.top = top + 'px';
             panel.style.left = r.left + 'px';
             panel.style.width = r.width + 'px';
-            panel.style.zIndex = '60';
+            panel.style.zIndex = fsOpen ? '205' : '60';
             panel.style.boxSizing = 'border-box';
             panel.style.maxHeight = Math.max(160, window.innerHeight - top - 12) + 'px';
             panel.style.overflowY = 'auto';
@@ -2710,7 +2721,10 @@ body.day-mode header.border-b {
 
             const ta = document.createElement('textarea');
             ta.value = String(sentences[idx]);
+            let fsEdit = false;
+            try { fsEdit = !!isReaderFullscreen; } catch (e) {}
             ta.style.cssText = 'width:100%; box-sizing:border-box; background:#ffffff; color:#1c1917; border:2px solid #38bdf8; border-radius:10px; padding:10px; font-size:17px; line-height:1.6; min-height:96px; resize:vertical;';
+            if (fsEdit) ta.style.fontSize = `${fullscreenFontSizePt}pt`;
             const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(96, ta.scrollHeight + 4) + 'px'; };
             ta.addEventListener('input', grow);
             ta.addEventListener('keydown', (e) => {
@@ -5378,6 +5392,7 @@ body.day-mode header.border-b {
                 el.classList.remove('reader-fullscreen-active');
                 if (btn) btn.innerHTML = '<i class="fa-solid fa-expand text-[15px]"></i>';
             }
+            positionFindPanel(); // 찾기 창이 열려 있으면 전체화면 여부에 맞게 위치·층을 다시 잡는다
         }
 
         // 문장으로 자동 스크롤할 때, 화면 위쪽에 고정된 제목 카드+메뉴바만큼을 뺀
