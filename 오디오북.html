@@ -916,15 +916,20 @@ body.day-mode header.border-b {
                 </button>
             </div>
 
-            <div class="space-y-1.5 shrink-0">
-                <label class="text-[15px] font-medium text-stone-300">제목</label>
-                <input type="text" id="edit-draft-title-input" placeholder="책 또는 글 제목" class="w-full bg-stone-800 border border-stone-700 rounded-xl px-3.5 py-2.5 text-[15px] text-stone-100 outline-none focus:border-amber-500 font-medium">
-            </div>
+            <div class="flex items-center gap-2 flex-wrap shrink-0">
+                    <label class="text-[15px] font-medium text-stone-300 shrink-0">제목</label>
+                    <input style="min-width:160px;" type="text" id="edit-draft-title-input" placeholder="책 또는 글 제목" class="flex-1 bg-stone-800 border border-stone-700 rounded-xl px-3.5 py-2.5 text-[15px] text-stone-100 outline-none focus:border-amber-500 font-medium">
+                    <div class="flex items-center gap-1.5">
+                            <input type="text" id="edit-draft-find-input" placeholder="찾을 글자" oninput="editDraftFindCount()" onkeydown="if(event.key==='Enter'){event.preventDefault();editDraftFind(event.shiftKey?-1:1);}" class="bg-stone-800 border border-stone-700 rounded-xl px-3 py-1.5 text-[15px] text-stone-100 outline-none focus:border-amber-500 font-medium" style="width:220px; max-width:48vw;">
+                            <button type="button" onclick="editDraftFind(-1)" title="이전 찾기 (Shift+Enter)" class="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 active:scale-95 text-white text-[15px] rounded-xl font-bold shadow-md">◀</button>
+                            <button type="button" onclick="editDraftFind(1)" title="다음 찾기 (Enter)" class="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 active:scale-95 text-white text-[15px] rounded-xl font-bold shadow-md">▶</button>
+                            <span id="edit-draft-find-count" class="text-[15px] text-stone-400 font-mono min-w-[3.5rem]"></span>
+                        </div>
+                </div>
 
-            <div class="space-y-1.5 flex-1 min-h-0 flex flex-col">
-                <label class="text-[15px] font-medium text-stone-300">본문</label>
-                <textarea id="edit-draft-text-input" class="w-full flex-1 min-h-[240px] bg-stone-950 border border-stone-700 rounded-xl p-3 sm:p-4 text-[15px] leading-relaxed text-stone-100 outline-none font-serif resize-none focus:border-amber-500" style="font-size: 14pt;"></textarea>
-            </div>
+            <div class="flex-1 min-h-0 flex flex-col">
+                    <textarea id="edit-draft-text-input" class="w-full flex-1 min-h-[240px] bg-stone-950 border border-stone-700 rounded-xl p-3 sm:p-4 text-[15px] leading-relaxed text-stone-100 outline-none font-serif resize-none focus:border-amber-500" style="font-size: 14pt;"></textarea>
+                </div>
 
             <div class="flex justify-end space-x-2 sm:space-x-3 pt-2 border-t border-stone-800 shrink-0">
                 <button onclick="closeEditDraftModal()" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 active:scale-95 text-white text-[15px] rounded-xl font-bold shadow-md">취소</button>
@@ -4729,11 +4734,86 @@ body.day-mode header.border-b {
             editingDraftId = id;
             document.getElementById('edit-draft-title-input').value = draft.title || '';
             document.getElementById('edit-draft-text-input').value = draft.text || '';
+            try { const fc = document.getElementById('edit-draft-find-count'); if (fc) fc.textContent = ''; } catch (e) {}
 
             const m = document.getElementById('edit-draft-modal');
             const c = document.getElementById('edit-draft-modal-content');
             m.classList.remove('hidden');
             setTimeout(() => { m.classList.remove('opacity-0'); c.classList.remove('scale-95'); c.classList.add('scale-100'); }, 10);
+        }
+
+        // ---- 원고 수정 팝업의 "찾기" ----
+        // 입력칸 안에서 글자를 찾아 그 자리를 선택(파란 표시)하고 화면 가운데로 스크롤한다.
+        // 지금 입력칸에 있는 글(저장하기 전 내용)을 기준으로 찾는다.
+        function editDraftFindPositions() {
+            const ta = document.getElementById('edit-draft-text-input');
+            const qEl = document.getElementById('edit-draft-find-input');
+            if (!ta || !qEl || !qEl.value) return { ta, q: '', positions: [] };
+            const lt = ta.value.toLowerCase();
+            const lq = qEl.value.toLowerCase();
+            const positions = [];
+            let p = lt.indexOf(lq);
+            while (p >= 0) { positions.push(p); p = lt.indexOf(lq, p + Math.max(1, lq.length)); }
+            return { ta, q: qEl.value, positions };
+        }
+
+        function editDraftFindCount(currentPos) {
+            const cnt = document.getElementById('edit-draft-find-count');
+            if (!cnt) return;
+            const { q, positions } = editDraftFindPositions();
+            if (!q) { cnt.textContent = ''; return; }
+            if (!positions.length) { cnt.textContent = '0개'; return; }
+            const at = (typeof currentPos === 'number') ? positions.indexOf(currentPos) : -1;
+            cnt.textContent = at >= 0 ? `${at + 1}/${positions.length}` : `${positions.length}개`;
+        }
+
+        function scrollTextareaToPos(ta, pos) {
+            const cs = getComputedStyle(ta);
+            const padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0;
+            const div = document.createElement('div');
+            ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight', 'wordSpacing', 'textIndent', 'paddingTop', 'paddingLeft', 'paddingRight', 'tabSize'].forEach(k => { div.style[k] = cs[k]; });
+            div.style.boxSizing = 'content-box';
+            div.style.width = Math.max(10, ta.clientWidth - padL - padR) + 'px';
+            div.style.position = 'absolute';
+            div.style.visibility = 'hidden';
+            div.style.left = '-99999px';
+            div.style.top = '0';
+            div.style.whiteSpace = 'pre-wrap';
+            div.style.overflowWrap = 'break-word';
+            div.style.wordBreak = cs.wordBreak;
+            div.textContent = ta.value.substring(0, pos);
+            const mark = document.createElement('span');
+            mark.textContent = ta.value.substring(pos, pos + 1) || '.';
+            div.appendChild(mark);
+            document.body.appendChild(div);
+            const top = mark.offsetTop;
+            document.body.removeChild(div);
+            ta.scrollTop = Math.max(0, top - ta.clientHeight / 2);
+        }
+
+        function editDraftFind(dir) {
+            const { ta, q, positions } = editDraftFindPositions();
+            const cnt = document.getElementById('edit-draft-find-count');
+            if (!ta) return;
+            if (!q) { if (cnt) cnt.textContent = ''; return; }
+            if (!positions.length) { if (cnt) cnt.textContent = '0개'; return; }
+            const selStart = ta.selectionStart;
+            const selIsMatch = ta.selectionEnd - ta.selectionStart === q.length &&
+                ta.value.substring(selStart, ta.selectionEnd).toLowerCase() === q.toLowerCase();
+            let target;
+            if (dir >= 0) {
+                target = positions.find(x => selIsMatch ? x > selStart : x >= selStart);
+                if (target === undefined) target = positions[0];
+            } else {
+                for (let i = positions.length - 1; i >= 0; i--) {
+                    if (positions[i] < selStart) { target = positions[i]; break; }
+                }
+                if (target === undefined) target = positions[positions.length - 1];
+            }
+            ta.focus();
+            ta.setSelectionRange(target, target + q.length);
+            scrollTextareaToPos(ta, target);
+            editDraftFindCount(target);
         }
 
         function closeEditDraftModal() {
