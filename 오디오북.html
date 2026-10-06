@@ -258,6 +258,9 @@ body.day-mode header.border-b {
 #btn-generate-all-chapters:hover { background: #92400e !important; }
 #btn-progressive-play { background: #0369a1 !important; border-color: #0c4a6e !important; }
 #btn-progressive-play:hover { background: #075985 !important; }
+/* 생성 중에는 챕터생성/전체(zip) 버튼이 "취소" 버튼이 된다: 빨강 */
+#btn-generate-audiobook.is-cancel, #btn-generate-all-chapters.is-cancel { opacity: 1 !important; background: #b91c1c !important; border-color: #7f1d1d !important; cursor: pointer !important; }
+#btn-generate-audiobook.is-cancel:hover, #btn-generate-all-chapters.is-cancel:hover { background: #991b1b !important; }
 /* 생성 중(눌러지지 않는 상태)에는 연해지지 않고, 마우스를 올렸을 때와 같은 진한 색으로 보이게 한다 */
 #btn-generate-audiobook:disabled, #btn-generate-audiobook.opacity-60 { opacity: 1 !important; background: #065f46 !important; cursor: not-allowed !important; }
 #btn-generate-all-chapters:disabled { opacity: 1 !important; background: #92400e !important; cursor: not-allowed !important; }
@@ -475,6 +478,13 @@ body.day-mode header.border-b {
 
                 
 
+                <div id="audiobook-gen-progress-wrap" class="space-y-1 hidden">
+                    <div class="w-full h-2 bg-stone-900 rounded-full overflow-hidden border border-stone-700">
+                        <div id="audiobook-gen-progress-bar" class="h-full bg-emerald-500 transition-all" style="width: 0%;"></div>
+                    </div>
+                    <p id="audiobook-gen-progress-label" class="text-[15px] text-stone-400 text-center font-mono">0 / 80 문장 생성 중... (0%)</p>
+                </div>
+
                 <div id="status-toast" class="bg-stone-950/80 border border-stone-800 text-stone-300 text-[15px] py-1.5 px-3 rounded-xl flex items-start justify-between shadow-inner gap-2">
                     <div class="flex items-start space-x-2 mr-2 min-w-0">
                         <span id="playing-indicator" class="w-2 h-2 rounded-full bg-stone-500 shrink-0 mt-1.5"></span>
@@ -483,17 +493,6 @@ body.day-mode header.border-b {
                     <span id="progress-text" class="text-amber-400 font-mono text-[15px] shrink-0 font-semibold">4 / 219 문장</span>
                 </div>
                     </div>
-                <button onclick="cancelGenerateAudiobook()" id="btn-cancel-audiobook-gen" class="w-full py-2 bg-stone-800 hover:bg-stone-700 text-rose-400 border border-stone-700 rounded-xl text-[15px] font-bold transition hidden">
-                    생성 취소 (진행 상황은 저장됩니다)
-                </button>
-
-                <div id="audiobook-gen-progress-wrap" class="space-y-1 hidden">
-                    <div class="w-full h-2 bg-stone-900 rounded-full overflow-hidden border border-stone-700">
-                        <div id="audiobook-gen-progress-bar" class="h-full bg-emerald-500 transition-all" style="width: 0%;"></div>
-                    </div>
-                    <p id="audiobook-gen-progress-label" class="text-[15px] text-stone-400 text-center font-mono">0 / 80 문장 생성 중... (0%)</p>
-                </div>
-
                 <a id="audiobook-download-link" href="#" class="hidden"></a>
             </div>
 
@@ -3186,7 +3185,6 @@ body.day-mode header.border-b {
 
         function updateAudiobookGenUI(current, total) {
             const btn = document.getElementById('btn-generate-audiobook');
-            const cancelBtn = document.getElementById('btn-cancel-audiobook-gen');
             const progressWrap = document.getElementById('audiobook-gen-progress-wrap');
             const progressBar = document.getElementById('audiobook-gen-progress-bar');
             const progressLabel = document.getElementById('audiobook-gen-progress-label');
@@ -3197,10 +3195,13 @@ body.day-mode header.border-b {
             // "챕터생성" 버튼은 생성 중에도 화면에서 사라지지 않고 계속 그 자리에 있는다
             // (사라졌다 나타났다 하면 화면이 흔들려서, 숨기는 대신 눌러도 반응 없게만 막는다).
             if (isGeneratingAudiobook) {
-                btn.disabled = true;
-                btn.classList.add('opacity-60');
-                btn.style.cursor = 'not-allowed';
-                cancelBtn.classList.remove('hidden');
+                // 생성 중에는 이 버튼이 곧 "취소" 버튼이다 (글자는 그대로 "생성 중... N%", 색은 빨강).
+                btn.disabled = false;
+                btn.classList.remove('opacity-60');
+                btn.classList.add('is-cancel');
+                btn.style.cursor = '';
+                btn.title = '누르면 생성을 취소합니다 (지금까지 만든 문장은 저장됩니다)';
+                btn.onclick = () => requestCancelGeneration();
                 progressWrap.classList.remove('hidden');
                 if (total) {
                     const pct = Math.round((current / total) * 100);
@@ -3211,13 +3212,20 @@ body.day-mode header.border-b {
                     btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>생성 중...</span>`;
                 }
             } else {
-                cancelBtn.classList.add('hidden');
                 progressWrap.classList.add('hidden');
                 btn.disabled = false;
                 btn.classList.remove('opacity-60');
                 btn.style.cursor = '';
                 btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>챕터생성</span>`;
-                btn.onclick = () => generateChapterAudiobook();
+                if (isGeneratingAllChapters) {
+                    // 전체(zip)로 챕터를 차례로 만드는 중이면, 챕터 사이에도 이 버튼은 계속 "취소" 역할
+                    btn.classList.add('is-cancel');
+                    btn.onclick = () => requestCancelGeneration();
+                } else {
+                    btn.classList.remove('is-cancel');
+                    btn.title = '이 챕터 생성하기';
+                    btn.onclick = () => generateChapterAudiobook();
+                }
             }
 
             // "다운로드" 버튼은 완성된 결과물(generatedAudiobookUrl)이 있을 때만 눌리게 한다 —
@@ -4149,7 +4157,12 @@ body.day-mode header.border-b {
 
             const allBtn = document.getElementById('btn-generate-all-chapters');
             isGeneratingAllChapters = true;
-            if (allBtn) allBtn.disabled = true;
+            // 전체 생성 중에는 이 버튼도 "취소" 버튼이 된다 (글자는 그대로 "전체(zip)", 색은 빨강).
+            if (allBtn) {
+                allBtn.classList.add('is-cancel');
+                allBtn.title = '누르면 전체 생성을 취소합니다 (지금까지 만든 문장은 저장됩니다)';
+                allBtn.onclick = () => requestCancelGeneration();
+            }
 
             const ranges = getChapterRanges();
             if (ranges.length > 1) {
@@ -4178,7 +4191,12 @@ body.day-mode header.border-b {
             }
 
             isGeneratingAllChapters = false;
-            if (allBtn) allBtn.disabled = false;
+            if (allBtn) {
+                allBtn.classList.remove('is-cancel');
+                allBtn.title = '모든 챕터를 순서대로 한 번에 생성한 뒤, zip 파일 하나로 받습니다';
+                allBtn.onclick = () => generateAllChaptersSequentially();
+            }
+            updateAudiobookGenUI();
 
             if (generatedFiles.length > 0) {
                 if (generatedFiles.length === 1) {
@@ -4194,6 +4212,13 @@ body.day-mode header.border-b {
             } else {
                 setStatus("⏹️ 전체 챕터 생성이 완료되지 못했습니다.");
             }
+        }
+
+        // 생성 중인 "챕터생성"/"전체(zip)" 버튼을 누르면 호출된다. 실수로 눌러 끊기지 않게 한 번 확인한다.
+        function requestCancelGeneration() {
+            if (!isGeneratingAudiobook && !isGeneratingAllChapters) return;
+            if (!confirm('생성을 취소할까요?\n지금까지 만든 문장은 저장되어 있어서, 다시 눌러 이어서 만들 수 있습니다.')) return;
+            cancelGenerateAudiobook();
         }
 
         function cancelGenerateAudiobook() {
