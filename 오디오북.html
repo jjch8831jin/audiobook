@@ -245,6 +245,20 @@ body.day-mode header.border-b {
 /* 본문 문장 표시: 화면 폭에 맞춰 줄을 바꿀 때 단어 중간을 끊지 않고, 단어(어절) 단위로만 줄바꿈한다 */
 #sentence-list .sentence-item span.flex-1 { word-break: keep-all; overflow-wrap: break-word; }
 </style>
+<style>
+/* 챕터생성 / 전체(zip) / 바로듣기: 연한 반투명 대신 진한 단색 바탕 + 흰 글자 (낮·밤 모드 모두 또렷하게) */
+#btn-generate-audiobook, #btn-generate-all-chapters, #btn-progressive-play {
+    color: #ffffff !important;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.25);
+}
+#btn-generate-audiobook *, #btn-generate-all-chapters *, #btn-progressive-play * { color: #ffffff !important; }
+#btn-generate-audiobook { background: #047857 !important; border-color: #064e3b !important; }
+#btn-generate-audiobook:hover { background: #065f46 !important; }
+#btn-generate-all-chapters { background: #b45309 !important; border-color: #78350f !important; }
+#btn-generate-all-chapters:hover { background: #92400e !important; }
+#btn-progressive-play { background: #0369a1 !important; border-color: #0c4a6e !important; }
+#btn-progressive-play:hover { background: #075985 !important; }
+</style>
 </head>
 <body id="app-body" class="bg-stone-900 text-stone-100 min-h-screen flex flex-col font-sans transition-colors duration-500 selection:bg-blue-600 selection:text-white day-mode">
 
