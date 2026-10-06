@@ -258,6 +258,8 @@ body.day-mode header.border-b {
 #btn-generate-all-chapters:hover { background: #92400e !important; }
 #btn-progressive-play { background: #0369a1 !important; border-color: #0c4a6e !important; }
 #btn-progressive-play:hover { background: #075985 !important; }
+/* 지금 읽는 문장에는 ✎ 수정 버튼이 항상 보인다 */
+.sentence-active [data-hover-edit] { opacity: 1 !important; }
 /* 생성 중에는 챕터생성/전체(zip) 버튼이 "취소" 버튼이 된다: 빨강 */
 #btn-generate-audiobook.is-cancel, #btn-generate-all-chapters.is-cancel { opacity: 1 !important; background: #b91c1c !important; border-color: #7f1d1d !important; cursor: pointer !important; }
 #btn-generate-audiobook.is-cancel:hover, #btn-generate-all-chapters.is-cancel:hover { background: #991b1b !important; }
@@ -2478,6 +2480,18 @@ body.day-mode header.border-b {
             }
         }
 
+        // 수정 상자의 "찾기" 버튼: 찾기 창을 열고, 방금 쓰던 검색어로 다시 찾아서 결과를 보여준다.
+        // (방금 고친 문장은 결과에서 빠지니, 남은 곳만 차례로 이동해서 고치면 된다. 처음부터 다시 검색하지 않아도 된다.)
+        function openFindFromEdit() {
+            toggleFindPanel(true);
+            const q = document.getElementById('finder-query');
+            if (!q) return;
+            if (!String(q.value || '').trim() && lastFindQuery) q.value = lastFindQuery;
+            if (String(q.value || '').trim()) {
+                try { runSentenceFinder(); } catch (e) {}
+            }
+        }
+
         function ensureCustomRangeOn() {
             if (!customRangeEnabled) toggleCustomRange(true);
         }
@@ -2571,6 +2585,7 @@ body.day-mode header.border-b {
                 wrap.style.background = '';
                 wrap.style.boxShadow = '';
                 wrap.querySelectorAll('[data-find-edit]').forEach(b => b.remove());
+                wrap.querySelectorAll('[data-hover-edit]').forEach(b => { b.style.display = ''; });
                 if (!wrap.getAttribute('data-inline-editing')) {
                     const span = wrap.firstElementChild;
                     if (span && sentences[findHitIdx] != null) span.textContent = String(sentences[findHitIdx]);
@@ -2607,6 +2622,7 @@ body.day-mode header.border-b {
                     span.appendChild(document.createTextNode(text.slice(last)));
                 }
             }
+            wrap.querySelectorAll('[data-hover-edit]').forEach(b => { b.style.display = 'none'; });
             // 이동한 자리에서 바로 고칠 수 있는 수정 버튼
             const eb = document.createElement('button');
             eb.type = 'button';
@@ -2713,6 +2729,7 @@ body.day-mode header.border-b {
                 b.onclick = (e) => { e.stopPropagation(); fn(); };
                 return b;
             };
+            row.appendChild(mk('찾기', 'background:#e0f2fe; color:#075985; border:1px solid #7dd3fc;', openFindFromEdit));
             row.appendChild(mk('취소', 'background:#f5f5f4; color:#44403c; border:1px solid #d6d3d1;', cancelInlineEdit));
             row.appendChild(mk('저장하고 이 문장만 다시 만들기', 'background:#0284c7; color:#ffffff; border:1px solid #0369a1;', () => saveInlineEdit(idx, true)));
             row.appendChild(mk('저장', 'background:#059669; color:#ffffff; border:1px solid #047857;', () => saveInlineEdit(idx, false)));
@@ -5234,6 +5251,20 @@ body.day-mode header.border-b {
                 textSpan.innerText = sentence;
                 textSpan.onclick = () => jumpToSentence(idx);
 
+                // 읽다가 고칠 곳이 보이면, 마우스를 올렸을 때 나오는 ✎수정을 눌러 그 자리에서 바로 고친다.
+                // (찾기 창에서 검색하지 않아도 된다. 지금 읽는 문장에는 항상 보인다 — 아래 스타일 참고)
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.setAttribute('data-hover-edit', '1');
+                editBtn.className = "opacity-0 group-hover:opacity-100 px-2 py-1 bg-stone-800 hover:bg-stone-700 text-sky-300 text-[15px] rounded-lg border border-sky-500/30 transition shrink-0 ml-2";
+                editBtn.textContent = '✎ 수정';
+                editBtn.title = '이 문장을 바로 수정';
+                editBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (hasUnsavedInlineEdit() && !confirm('수정 중인 문장이 아직 저장되지 않았어요. 버리고 이동할까요?')) return;
+                    startInlineEdit(idx);
+                };
+
                 const inspectBtn = document.createElement('button');
                 inspectBtn.className = "opacity-0 group-hover:opacity-100 px-2 py-1 bg-stone-800 hover:bg-stone-700 text-amber-300 text-[15px] rounded-lg border border-amber-500/30 transition shrink-0 ml-2";
                 inspectBtn.innerHTML = `<i class="fa-solid fa-magnifying-glass"></i> AI 돋보기`;
@@ -5243,6 +5274,7 @@ body.day-mode header.border-b {
                 };
 
                 wrap.appendChild(textSpan);
+                wrap.appendChild(editBtn);
                 wrap.appendChild(inspectBtn);
                 listEl.appendChild(wrap);
             });
