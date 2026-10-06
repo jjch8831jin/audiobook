@@ -258,6 +258,10 @@ body.day-mode header.border-b {
 #btn-generate-all-chapters:hover { background: #92400e !important; }
 #btn-progressive-play { background: #0369a1 !important; border-color: #0c4a6e !important; }
 #btn-progressive-play:hover { background: #075985 !important; }
+/* 생성 중(눌러지지 않는 상태)에는 연해지지 않고, 마우스를 올렸을 때와 같은 진한 색으로 보이게 한다 */
+#btn-generate-audiobook:disabled, #btn-generate-audiobook.opacity-60 { opacity: 1 !important; background: #065f46 !important; cursor: not-allowed !important; }
+#btn-generate-all-chapters:disabled { opacity: 1 !important; background: #92400e !important; cursor: not-allowed !important; }
+#btn-progressive-play:disabled { opacity: 1 !important; background: #075985 !important; cursor: not-allowed !important; }
 </style>
 </head>
 <body id="app-body" class="bg-stone-900 text-stone-100 min-h-screen flex flex-col font-sans transition-colors duration-500 selection:bg-blue-600 selection:text-white day-mode">
