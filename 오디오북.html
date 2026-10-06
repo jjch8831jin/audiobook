@@ -2503,6 +2503,43 @@ body.day-mode header.border-b {
             updateFinderSelected();
         }
 
+        // AI가 한 문장을 잘못 읽었을 때(글자를 건너뛰거나 갑자기 느려짐 등), 그 문장의 "저장된 소리"만 지운다.
+        // 그 뒤 챕터생성을 누르면, 지운 문장 하나만 AI에게 다시 받고 나머지는 저장된 소리를 써서
+        // 챕터 파일을 새로 조립한다(문장 위치 정보도 그때 새로 계산되어 싱크가 맞는다).
+        async function redoSentenceVoice(idx) {
+            if (isGeneratingAudiobook) {
+                setStatus('⚠️ 챕터를 만드는 중에는 소리를 지울 수 없어요. 멈춘 뒤에 다시 눌러 주세요.');
+                return;
+            }
+            if (!currentBookId || idx < 0 || idx >= sentences.length) return;
+            const n = idx + 1;
+            try {
+                // 챕터 만들기에서 쓰는 저장분(문장 하나 = 소리 한 조각)과, 길이 기록
+                const batches = getSentenceBatches(idx, idx + 1);
+                for (const b of batches) {
+                    const id = batchChunkIdFor(b.start, b.end);
+                    try { await idbDeleteChunk(id); } catch (e) {}
+                    try { localStorage.removeItem(batchDurationKey(id)); } catch (e) {}
+                }
+                // 한 문장씩 바로 읽을 때 쓰는 저장분도 같이 지운다
+                const liveKey = chunkIdFor(idx);
+                try { delete aiAudioCache[liveKey]; } catch (e) {}
+                try { await idbDeleteChunk(liveKey); } catch (e) {}
+            } catch (e) {
+                setStatus('⚠️ 저장된 소리를 지우지 못했어요: ' + (e && e.message ? e.message : e));
+                return;
+            }
+
+            // 챕터생성이 "이 문장만"이 아니라 챕터 전체를 조립하도록, 범위 지정을 끄고 그 문장이 속한 챕터를 고른다.
+            if (customRangeEnabled) toggleCustomRange(false);
+            const chIdx = Math.floor(idx / chapterSizeSentences);
+            const sel = document.getElementById('chapter-select');
+            if (sel) sel.value = String(chIdx);
+            selectChapter(chIdx);
+
+            setStatus(`🔄 ${n}번 문장의 저장된 소리를 지웠어요. 챕터 ${chIdx + 1}이 선택되어 있으니 "챕터생성"을 누르면, 이 문장만 AI에게 다시 받아서 챕터 파일을 새로 만듭니다.`);
+        }
+
         function setFinderRange(n, which) {
             ensureCustomRangeOn();
             let sv = customRangeStart;
@@ -2807,6 +2844,7 @@ body.day-mode header.border-b {
                 const styles = {
                     go: 'background:#0284c7; color:#ffffff; border:1px solid #0369a1;',
                     redo: 'background:#d1fae5; color:#065f46; border:1px solid #6ee7b7;',
+                    voice: 'background:#ffedd5; color:#9a3412; border:1px solid #fdba74;',
                     plain: 'background:#f5f5f4; color:#44403c; border:1px solid #d6d3d1;'
                 };
                 const mk = (label, kind, fn) => {
@@ -2819,6 +2857,7 @@ body.day-mode header.border-b {
                 };
                 btns.appendChild(mk('이동', 'go', () => goTo(idx)));
                 btns.appendChild(mk('이 문장만 다시 만들기', 'redo', () => setFinderRange(n, 'both')));
+                btns.appendChild(mk('이 문장 소리 다시 받기', 'voice', () => redoSentenceVoice(idx)));
                 btns.appendChild(mk('시작', 'plain', () => setFinderRange(n, 'start')));
                 btns.appendChild(mk('끝', 'plain', () => setFinderRange(n, 'end')));
 
@@ -2873,8 +2912,45 @@ body.day-mode header.border-b {
             refreshChapterProgressLabel();
         }
 
+        // 마지막으로 작업한 챕터를 기억해 두었다가, 창을 새로 열거나 같은 원고를 다시 불러오면
+        // 맨 앞(챕터 1)이 아니라 그 챕터를 보여준다. (어디까지 받았는지 헷갈리지 않게)
+        function saveLastChapter() {
+            try {
+                const raw = localStorage.getItem('audiobook_last_chapter');
+                const m = raw ? JSON.parse(raw) : {};
+                if (!m.byId) m.byId = {};
+                if (!m.byTitle) m.byTitle = {};
+                const titleEl = document.getElementById('current-book-title');
+                const title = titleEl ? titleEl.textContent : '';
+                const rec = { idx: currentChapterIndex, size: chapterSizeSentences };
+                const put = (obj, key) => {
+                    delete obj[key];           // 최근 것이 맨 뒤로 가도록
+                    obj[key] = rec;
+                    const keys = Object.keys(obj);
+                    if (keys.length > 100) keys.slice(0, keys.length - 100).forEach(k => delete obj[k]);
+                };
+                if (currentBookId) put(m.byId, currentBookId);
+                if (title) put(m.byTitle, title);
+                localStorage.setItem('audiobook_last_chapter', JSON.stringify(m));
+            } catch (e) {}
+        }
+
+        function restoreLastChapterIndex(title) {
+            try {
+                const raw = localStorage.getItem('audiobook_last_chapter');
+                if (!raw) return 0;
+                const m = JSON.parse(raw);
+                const rec = (m.byId && currentBookId && m.byId[currentBookId]) || (m.byTitle && title && m.byTitle[title]);
+                if (!rec || rec.size !== chapterSizeSentences) return 0;
+                const idx = parseInt(rec.idx, 10);
+                const total = Math.max(1, Math.ceil(sentences.length / chapterSizeSentences));
+                return (idx >= 0 && idx < total) ? idx : 0;
+            } catch (e) { return 0; }
+        }
+
         function selectChapter(val) {
             currentChapterIndex = parseInt(val, 10) || 0;
+            saveLastChapter();
             resetGeneratedAudiobook();
             refreshChapterProgressLabel();
         }
@@ -3715,6 +3791,7 @@ body.day-mode header.border-b {
         }
 
         async function generateChapterAudiobook() {
+            saveLastChapter();
             if (!useGeminiAI) {
                 setStatus("⚠️ 오디오북 생성은 AI 음성 모드에서만 가능합니다.");
                 return false;
@@ -5102,7 +5179,7 @@ body.day-mode header.border-b {
 
             currentBookId = computeBookId(title, text);
             window.__currentBookText = text;
-            currentChapterIndex = 0;
+            currentChapterIndex = restoreLastChapterIndex(title);
             renderSentences();
             updateProgressUI();
             renderChapterSelector();
