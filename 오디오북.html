@@ -447,11 +447,16 @@ body.day-mode header.border-b {
 
 <!-- 3. 성우 선택 UI -->
                 <div class="flex flex-col space-y-2">
-                    <div class="flex items-center justify-between">
+                    <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
                         <div class="flex items-center bg-stone-900 border border-stone-700 rounded-lg p-0.5 text-[15px]">
                             <button onclick="filterGender('all')" id="btn-gender-all" class="px-2.5 py-1 rounded font-bold bg-amber-500 text-white">전체</button>
                             <button onclick="filterGender('male')" id="btn-gender-male" class="px-2.5 py-1 rounded text-stone-400 hover:text-stone-200">남성 👨</button>
                             <button onclick="filterGender('female')" id="btn-gender-female" class="px-2.5 py-1 rounded text-stone-400 hover:text-stone-200">여성 👩</button>
+                        </div>
+                        <div class="flex items-center space-x-1 text-[15px]" title="속도 조절 (재생기 위의 속도 조절과 같은 값입니다)">
+                            <button onclick="adjustRate(-0.01)" title="속도 느리게" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">-</button>
+                            <span id="rate-display-gen" class="font-mono font-bold text-base w-10 text-center text-white">1.00x</span>
+                            <button onclick="adjustRate(0.01)" title="속도 빠르게" class="w-7 h-7 bg-amber-500 rounded-md font-extrabold text-base text-black hover:bg-amber-400 active:scale-95 shadow">+</button>
                         </div>
                         <button id="btn-engine-toggle" onclick="toggleEngineMode()" class="px-2.5 py-1 rounded-lg text-[15px] font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow flex items-center space-x-1.5 active:scale-95 transition">
                             <i class="fa-solid fa-wand-magic-sparkles"></i>
@@ -8615,6 +8620,25 @@ body.day-mode header.border-b {
       }
     });
     setInterval(schedule, 700); // 전체화면 전환·본문 교체 등 놓친 변화를 보정
+  })();
+</script>
+
+<script>
+  // 성우 선택 줄의 속도 표시(rate-display-gen)를 재생기 위의 속도 표시(rate-display)와 항상 같게 맞춘다.
+  (function () {
+    function sync() {
+      var src = document.getElementById('rate-display');
+      var dst = document.getElementById('rate-display-gen');
+      if (src && dst) dst.textContent = src.textContent;
+    }
+    function start() {
+      var src = document.getElementById('rate-display');
+      if (!src) return;
+      new MutationObserver(sync).observe(src, { childList: true, characterData: true, subtree: true });
+      sync();
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
   })();
 </script>
 
