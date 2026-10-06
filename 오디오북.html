@@ -434,7 +434,7 @@ body.day-mode header.border-b {
                     <div class="grid grid-cols-2 gap-2">
                     <div class="space-y-1">
                         <label class="text-[15px] text-stone-500 font-semibold">챕터당 문장 수</label>
-                        <input type="number" id="chapter-size-input" value="80" min="10" max="500" step="10" onchange="onChapterSizeChange(this.value)" class="w-full bg-stone-950 border border-stone-700 rounded-lg px-2 py-1.5 text-[15px] text-stone-200 focus:outline-none focus:border-emerald-500/50">
+                        <input type="number" id="chapter-size-input" value="500" min="10" max="500" step="10" onchange="onChapterSizeChange(this.value)" class="w-full bg-stone-950 border border-stone-700 rounded-lg px-2 py-1.5 text-[15px] text-stone-200 focus:outline-none focus:border-emerald-500/50">
                     </div>
                     <div class="space-y-1">
                         <label class="text-[15px] text-stone-500 font-semibold">챕터 선택</label>
@@ -1462,7 +1462,7 @@ body.day-mode header.border-b {
         });
 
         let currentBookId = null;
-        let chapterSizeSentences = 80;
+        let chapterSizeSentences = 500;
         let currentChapterIndex = 0;
         let isGeneratingAllChapters = false;
         let isFullAudioMode = false;
