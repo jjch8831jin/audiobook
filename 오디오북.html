@@ -2361,7 +2361,10 @@ body.day-mode header.border-b {
             });
         }
 
-        async function idbGetChunk(id) {
+        // 저장 이름표를 "문장 내용" 기준으로 바꾼 뒤에도, 예전 이름표로 저장된 소리를 한 번은 그대로 쓰도록
+        // (새 이름표 -> 예전 이름표) 짝을 기억해 둔다. 예전 소리를 찾으면 새 이름표로 옮겨 저장한다.
+        const legacyChunkIds = {};
+        async function idbGetChunkRaw(id) {
             const db = await getAudiobookDB();
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(AUDIOBOOK_STORE, 'readonly');
@@ -2370,12 +2373,27 @@ body.day-mode header.border-b {
                 req.onerror = () => reject(req.error);
             });
         }
+        async function idbGetChunk(id) {
+            const found = await idbGetChunkRaw(id);
+            if (found) return found;
+            const old = legacyChunkIds[id];
+            if (!old) return null;
+            const rec = await idbGetChunkRaw(old);
+            if (!rec) return null;
+            try {
+                await idbPutChunk(id, rec.sampleRate, rec.channelData);
+                const d = localStorage.getItem(`ab_batchdur::${old}`);
+                if (d) localStorage.setItem(`ab_batchdur::${id}`, d);
+            } catch (e) {}
+            return rec;
+        }
 
         async function idbDeleteChunk(id) {
             const db = await getAudiobookDB();
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(AUDIOBOOK_STORE, 'readwrite');
                 tx.objectStore(AUDIOBOOK_STORE).delete(id);
+                if (legacyChunkIds[id]) tx.objectStore(AUDIOBOOK_STORE).delete(legacyChunkIds[id]);
                 tx.oncomplete = () => resolve();
                 tx.onerror = () => reject(tx.error);
             });
@@ -2386,8 +2404,16 @@ body.day-mode header.border-b {
             const db = await getAudiobookDB();
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(AUDIOBOOK_STORE, 'readonly');
-                const req = tx.objectStore(AUDIOBOOK_STORE).getKey(id);
-                req.onsuccess = () => resolve(!!req.result);
+                const store = tx.objectStore(AUDIOBOOK_STORE);
+                const req = store.getKey(id);
+                req.onsuccess = () => {
+                    if (req.result) return resolve(true);
+                    const old = legacyChunkIds[id];
+                    if (!old) return resolve(false);
+                    const req2 = store.getKey(old);
+                    req2.onsuccess = () => resolve(!!req2.result);
+                    req2.onerror = () => reject(req2.error);
+                };
                 req.onerror = () => reject(req.error);
             });
         }
@@ -2409,7 +2435,16 @@ body.day-mode header.border-b {
             // "v2"는 긴 문장을 쪼개서 이어붙이는 방식으로 바뀐 버전 표시. 이 표시가
             // 없으면 예전 방식(4초 안팎에서 잘린 오디오)으로 만들어진 캐시가 재사용될
             // 수 있어, 버전 값을 넣어 예전 캐시는 자동으로 무시하고 새로 생성하게 한다.
-            return `${currentBookId}::${currentVoiceKey()}::v2::${sentenceIdx}`;
+            // 저장 이름표는 책 전체 글자 수가 아니라 "그 문장의 내용"으로 만든다. 그래서 다른 곳을 고쳐도
+            // 안 고친 문장의 저장된 소리는 그대로 쓰이고, 고친 문장만 새로 받는다.
+            const oldId = `${currentBookId}::${currentVoiceKey()}::v2::${sentenceIdx}`;
+            const id = `${currentVoiceKey()}::t1::${sentenceContentTag(sentences[sentenceIdx] || '')}`;
+            legacyChunkIds[id] = oldId;
+            return id;
+        }
+        function sentenceContentTag(t) {
+            t = String(t);
+            return simpleHash(t) + '-' + simpleHash(t.split('').reverse().join('')) + '-' + t.length;
         }
 
         const AUDIOBOOK_BATCH_SIZE = 1; // 챕터 생성 시 몇 문장씩 묶어서 TTS 요청할지 (1문장씩 = 자막 타이밍이 정확해짐, 대신 요청 횟수가 늘어남)
@@ -2429,7 +2464,11 @@ body.day-mode header.border-b {
             // gcloud 뒤의 "-r4"는 Chirp3 HD가 speakingRate를 지원하지 않는다는 걸 확인하고
             // 그 파라미터를 아예 빼서 다시 정리한 버전 표시.
             const engineTag = ttsEngine === 'gcloud' ? 'gcloud-r4' : ttsEngine;
-            return `${currentBookId}::${currentVoiceKey()}::${engineTag}::batch::v2::${bStart}-${bEnd}`;
+            // (이름표는 책 전체가 아니라 문장 내용 기준: 고친 문장만 새로 받게 하려는 것. 예전 이름표는 legacyChunkIds로 한 번 이어 쓴다.)
+            const oldId = `${currentBookId}::${currentVoiceKey()}::${engineTag}::batch::v2::${bStart}-${bEnd}`;
+            const id = `${currentVoiceKey()}::${engineTag}::batch::t1::${sentenceContentTag(sentences.slice(bStart, bEnd).join('\n'))}`;
+            legacyChunkIds[id] = oldId;
+            return id;
         }
 
         // "오타 수정 등 — 범위만 다시 만들기"는 전용 체크박스 UI 없이, "본문 찾기"에서
