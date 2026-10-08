@@ -8185,26 +8185,58 @@ body.day-mode header.border-b {
         }
 
         async function callGeminiLLM(prompt, systemInstruction = null) {
-            const apiKey = getStoredApiKey();
-            if (!apiKey) {
+            const keys = getGeminiKeyList().filter(k => k && k.key);
+            if (keys.length === 0) {
                 openApiKeyModal();
                 throw new Error("Gemini API 키를 먼저 등록해 주세요.");
             }
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
+            // 새로 만든 키는 gemini-2.5-flash를 못 쓸 수 있어서(404), 새 모델을 먼저 쓰고 안 되면 예전 모델로 넘어간다.
+            // 지난번에 잘 됐던 모델은 기억해 두었다가 먼저 쓴다.
+            const models = ['gemini-3.6-flash', 'gemini-2.5-flash'];
+            try {
+                const pref = localStorage.getItem('gemini_llm_model');
+                if (pref && models.indexOf(pref) > 0) { models.splice(models.indexOf(pref), 1); models.unshift(pref); }
+            } catch (e) {}
+
             const payload = { contents: [{ parts: [{ text: prompt }] }] };
             if (systemInstruction) payload.systemInstruction = { parts: [{ text: systemInstruction }] };
 
-            const res = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': apiKey
-                },
-                body: JSON.stringify(payload)
-            });
-            if (!res.ok) throw new Error(`API 호출 실패: HTTP ${res.status}`);
-            const data = await res.json();
-            return data?.candidates?.[0]?.content?.parts?.[0]?.text || "응답이 없습니다.";
+            // 지금 선택된 키부터, 한도에 걸리거나 못 쓰는 키면 다음 키로 (음성용 선택 키는 바꾸지 않는다)
+            const activeId = getActiveApiKeyId();
+            const startIdx = Math.max(0, keys.findIndex(k => k.id === activeId));
+            let lastMsg = '';
+            for (let n = 0; n < keys.length; n++) {
+                const k = keys[(startIdx + n) % keys.length];
+                let nextKey = false;
+                for (let i = 0; i < models.length && !nextKey; i++) {
+                    let res;
+                    try {
+                        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${models[i]}:generateContent`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.key },
+                            body: JSON.stringify(payload)
+                        });
+                    } catch (e) {
+                        throw new Error(`API 호출 실패: 인터넷 연결을 확인해 주세요. (${e.message})`);
+                    }
+                    if (res.ok) {
+                        const data = await res.json();
+                        try { localStorage.setItem('gemini_llm_model', models[i]); } catch (e) {}
+                        return data?.candidates?.[0]?.content?.parts?.[0]?.text || "응답이 없습니다.";
+                    }
+                    const errData = await res.json().catch(() => ({}));
+                    const gmsg = errData?.error?.message || '';
+                    lastMsg = `HTTP ${res.status}${gmsg ? ' — ' + gmsg : ''}`;
+                    const low = gmsg.toLowerCase();
+                    const modelProblem = res.status === 404 || low.includes('no longer available') || low.includes('is not found') || low.includes('not supported for generatecontent');
+                    const keyProblem = res.status === 429 || res.status === 403 || (res.status === 400 && (low.includes('api key') || low.includes('api_key')));
+                    if (modelProblem && i < models.length - 1) continue; // 이 모델은 못 쓴다 -> 다음 모델
+                    if (res.status === 429 && i < models.length - 1) continue; // 이 모델 한도 -> 다음 모델
+                    if (keyProblem || modelProblem) { nextKey = true; continue; } // 이 키는 못 쓴다 -> 다음 키
+                    throw new Error(`API 호출 실패: ${lastMsg}`);
+                }
+            }
+            throw new Error(`API 호출 실패: 등록한 키로는 쓸 수 없습니다. (${lastMsg})`);
         }
 
         function openAIFeaturesModal() {
