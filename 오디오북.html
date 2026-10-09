@@ -5178,9 +5178,30 @@ body.day-mode header.border-b {
                     document.body.removeChild(ta);
                 } catch (e) { ok = false; }
             }
-            setStatus(ok
+            const msg = ok
                 ? `📋 [${d.title}] 원고를 복사했어요. (제목 + 본문) 원하는 곳에 붙여넣으세요.`
-                : '⚠️ 복사하지 못했어요. 브라우저가 복사를 막고 있을 수 있어요.');
+                : '⚠️ 복사하지 못했어요. 브라우저가 복사를 막고 있을 수 있어요.';
+            setStatus(msg);
+            showCopyNotice(msg, ok);
+        }
+
+        // 서재 창이 화면을 덮고 있어서 상태 줄이 가려지므로, 창 위에 안내를 잠깐 띄운다
+        let copyNoticeTimer = null;
+        function showCopyNotice(msg, ok) {
+            let el = document.getElementById('copy-notice');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'copy-notice';
+                el.style.cssText = 'position:fixed; left:50%; top:16px; transform:translateX(-50%); z-index:9999; max-width:90vw; padding:10px 16px; border-radius:12px; font-size:15px; font-weight:700; box-shadow:0 6px 20px rgba(0,0,0,.5); pointer-events:none;';
+                document.body.appendChild(el);
+            }
+            el.textContent = msg;
+            el.style.background = ok ? '#065f46' : '#9f1239';
+            el.style.color = '#ffffff';
+            el.style.border = ok ? '1px solid #34d399' : '1px solid #fb7185';
+            el.style.display = 'block';
+            clearTimeout(copyNoticeTimer);
+            copyNoticeTimer = setTimeout(() => { el.style.display = 'none'; }, 2000);
         }
 
         // 원고를 "책 재생목록" 선택에 추가/제거 (모달 안에서만 유지되는 임시 선택)
