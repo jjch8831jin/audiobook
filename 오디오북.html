@@ -9203,9 +9203,12 @@ body.day-mode header.border-b {
   window.openTimeSyncWindow = function(){
     if(win) return;
     var ab = document.getElementById('local-audiobook-audio');
-    if(!isFullAudioMode || !ab || !(ab.duration > 0) || !sentences || !sentences.length){
-      setStatus('⚠️ 시간 맞추기는 "파일 연동"으로 음성 파일을 연결해서 소리가 준비된 뒤에 쓸 수 있어요.'); return;
-    }
+    var why = '';
+    if(!sentences || !sentences.length) why = '본문(문장)이 아직 없습니다. 책을 먼저 열어 주세요.';
+    else if(!ab || !ab.getAttribute('src')) why = '연결된 음성 파일이 없습니다.\n"파일 연동"으로 음성 파일을 먼저 연결해 주세요.';
+    else if(!isFullAudioMode) why = '지금은 음성 파일 재생 모드가 아닙니다.\n"파일 연동"으로 연결한 음성 파일을 한 번 선택한 뒤 다시 눌러 주세요.';
+    else if(!(ab.duration > 0)) why = '음성 파일 길이를 아직 읽는 중입니다.\n잠시 뒤에 다시 눌러 주세요.';
+    if(why){ alert('시간 맞추기를 열 수 없습니다.\n' + why); return; }
     var od = (typeof ensureSentenceTimeOffsetsLoaded === 'function') ? ensureSentenceTimeOffsetsLoaded() : null;
     var odOk = od && Array.isArray(od.offsets) && od.offsets.length === (od.end - od.start) && od.end <= sentences.length;
     var rate, start, end, base, chIdx = currentChapterIndex, synthetic = false;
