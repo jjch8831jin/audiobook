@@ -9185,13 +9185,15 @@ body.day-mode header.border-b {
 .tsy-row .tm{flex:none;min-width:6.6em;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;color:#57534e}
 .tsy-row .tx{flex:1;font-size:20px;line-height:1.55;color:#000}
 .tsy-row.new .tm{color:#047857}
-.tsy-row.now{background:#d5f0df}
-.tsy-row.now .tx{color:#000;font-weight:700}
+.tsy-row.now{background:#ffe9c7}
+.tsy-row.now .tx{color:#9a3412;font-weight:700}
+.tsy-row.now .tm{color:#9a3412}
 .tsy-row.play .tm::before{content:'▶ ';color:#c2410c}
 #tsy-foot{display:flex;gap:10px;padding:10px 16px 14px;flex:none}
 #tsy-foot button{height:46px;border-radius:10px;border:1px solid #b8ad8a;background:#e7dfc6;color:#1c1917;font-size:17px;font-weight:700;cursor:pointer;padding:0 16px;white-space:nowrap}
 #tsy-foot button.go{flex:1;min-width:0;background:#f59e0b;border-color:#f59e0b;color:#1c1917;font-size:20px}
 #tsy-foot button.ok{background:#f59e0b;border-color:#f59e0b;color:#1c1917;padding:0 22px}
+#tsy-foot button.ok + button.ok{background:#fbbf24;border-color:#d97706}
 #tsy-foot button:disabled{opacity:.4;cursor:default}
 @media (max-width:600px){#tsy-foot .lg{display:none}#tsy-foot{gap:8px}#tsy-foot button{padding:0 10px}#tsy-foot button.ok{padding:0 14px}}
 </style>
@@ -9231,7 +9233,7 @@ body.day-mode header.border-b {
       '<button type="button" class="tsy-rb" data-pl title="재생">▶</button><button type="button" class="tsy-rb" data-st title="정지(처음으로)">■</button>' +
       '<span id="tsy-rate" title="속도 조절"><button type="button" data-rm>−</button><b data-rv></b><button type="button" data-rp>+</button></span></div>' +
       '<div id="tsy-list"></div>' +
-      '<div id="tsy-foot"><button type="button" data-undo>↶ <span class="lg">한 줄&nbsp;</span>되돌리기</button><button type="button" class="go" data-stamp>▶ 이 줄 시작!<span class="lg">&nbsp;(스페이스)</span></button><button type="button" class="ok" data-fin>끝내기</button></div>';
+      '<div id="tsy-foot"><button type="button" data-undo>↶ <span class="lg">한 줄&nbsp;</span>되돌리기</button><button type="button" class="go" data-stamp>▶ 이 줄 시작!<span class="lg">&nbsp;(스페이스)</span></button><button type="button" class="ok" data-fin>끝내기</button><button type="button" class="ok" data-save>파일저장</button></div>';
     document.body.appendChild(back); win = back;
     var prevOv = document.documentElement.style.overflow; document.documentElement.style.overflow = 'hidden';
     var q = function(s){ return back.querySelector(s); };
@@ -9297,24 +9299,132 @@ body.day-mode header.border-b {
       document.removeEventListener('keydown', onKey, true); clearInterval(timer);
       document.documentElement.style.overflow = prevOv; back.remove(); win = null;
     }
-    function finish(){
-      var n = Object.keys(stamped).length;
-      if(!n){ close(true); return; }
+    function validateOrder(){
       for(var i = 1; i < cur.length; i++){
         if(cur[i] < cur[i - 1]){
           alert('시간 순서가 맞지 않습니다.\n' + (start + i + 1) + '번 문장의 시간(' + tsyFmt(fileTimeOf(i)) + ')이 바로 앞 문장(' + tsyFmt(fileTimeOf(i - 1)) + ')보다 빠릅니다.\n그 문장을 눌러서 다시 찍어 주세요.');
-          selectTarget(i, false); return;
+          selectTarget(i, false); return false;
         }
       }
-      if(!confirm('찍은 ' + n + '개 문장의 시간으로 기존 시간을 바꿉니다. 저장할까요?')) return;
+      return true;
+    }
+    function commit(){
       var rec = { start: start, end: end, offsets: cur.slice(), rate: rate };
       sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chIdx, start: start, end: end, offsets: cur.slice(), rate: rate };
       try {
         localStorage.setItem('ab_offsets::' + currentBookId + '::' + chIdx, JSON.stringify(rec));
         localStorage.setItem('ab_offsets_edit::' + currentBookId + '::' + chIdx, JSON.stringify({ start: start, end: end, offsets: cur.slice(), rate: rate, textHash: computeSentencesHash(), sentenceCount: sentences.length }));
       } catch(e) { console.warn('시간 저장 실패', e); }
-      dirty = false; close(true);
+      dirty = false;
+    }
+    function finish(){
+      var n = Object.keys(stamped).length;
+      if(!n){ close(true); return; }
+      if(!validateOrder()) return;
+      if(!confirm('찍은 ' + n + '개 문장의 시간으로 기존 시간을 바꿉니다. 저장할까요?')) return;
+      commit(); close(true);
       setStatus('✅ 문장 시간 ' + n + '개를 저장했어요. 이제 문장을 누르거나 재생하면 새 시간으로 따라갑니다.');
+    }
+    // ---- 소리 파일에 시간을 넣어 저장 ----
+    function u32(dv, o, le){ return dv.getUint32(o, le); }
+    async function stripWavSync(blob){
+      var pos = 12, total = 4, parts = [];
+      while(pos + 8 <= blob.size){
+        var h = new DataView(await blob.slice(pos, pos + 8).arrayBuffer());
+        var id = String.fromCharCode(h.getUint8(0), h.getUint8(1), h.getUint8(2), h.getUint8(3));
+        var len = h.getUint32(4, true);
+        var e = Math.min(pos + 8 + len + (len % 2), blob.size);
+        if(id !== 'sync'){ parts.push(blob.slice(pos, e)); total += e - pos; }
+        pos = e;
+      }
+      var sz = new Uint8Array(4); new DataView(sz.buffer).setUint32(0, total, true);
+      return new Blob([blob.slice(0, 4), sz, blob.slice(8, 12)].concat(parts), { type: 'audio/wav' });
+    }
+    function syncsafe(n){ return [(n >> 21) & 0x7f, (n >> 14) & 0x7f, (n >> 7) & 0x7f, n & 0x7f]; }
+    async function putSyncInMp3(blob, payload){
+      var head = new Uint8Array(await blob.slice(0, 10).arrayBuffer());
+      if(!(head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33)) return embedSyncIntoMp3(blob, payload);
+      var ver = head[3], flags = head[5];
+      var bodySize = (head[6] << 21) | (head[7] << 14) | (head[8] << 7) | head[9];
+      var audioStart = 10 + bodySize + ((ver === 4 && (flags & 0x10)) ? 10 : 0);
+      if((ver !== 3 && ver !== 4) || (flags & 0x80)) return embedSyncIntoMp3(blob.slice(audioStart), payload); // 특이한 태그는 비우고 새로
+      var body = new Uint8Array(await blob.slice(10, 10 + bodySize).arrayBuffer());
+      var kept = [], p = 0;
+      while(p + 10 <= body.length){
+        var id = String.fromCharCode(body[p], body[p + 1], body[p + 2], body[p + 3]);
+        if(!/^[A-Z0-9]{4}$/.test(id)) break;
+        var fsz = ver === 4 ? ((body[p + 4] << 21) | (body[p + 5] << 14) | (body[p + 6] << 7) | body[p + 7])
+                            : (body[p + 4] * 16777216 + (body[p + 5] << 16) + (body[p + 6] << 8) + body[p + 7]);
+        var fe = p + 10 + fsz; if(fe > body.length) break;
+        var isOurs = false;
+        if(id === 'TXXX'){ var d = String.fromCharCode.apply(null, Array.from(body.slice(p + 11, p + 11 + 9))); isOurs = (d === 'SAJU-SYNC'); }
+        if(!isOurs) kept.push(body.slice(p, fe));
+        p = fe;
+      }
+      var desc = 'SAJU-SYNC', json = asciiJson(payload);
+      var content = new Uint8Array(1 + desc.length + 1 + json.length);
+      content[0] = 0; for(var i = 0; i < desc.length; i++) content[1 + i] = desc.charCodeAt(i);
+      content[1 + desc.length] = 0; for(var j = 0; j < json.length; j++) content[2 + desc.length + j] = json.charCodeAt(j);
+      var frame = new Uint8Array(10 + content.length);
+      frame.set([0x54, 0x58, 0x58, 0x58], 0);
+      if(ver === 4) frame.set(syncsafe(content.length), 4); else new DataView(frame.buffer).setUint32(4, content.length, false);
+      frame.set(content, 10);
+      var all = kept.concat([frame]), n = all.reduce(function(a, b){ return a + b.length; }, 0);
+      var tag = new Uint8Array(10 + n);
+      tag.set([0x49, 0x44, 0x33, ver, 0x00, 0x00], 0); tag.set(syncsafe(n), 6);
+      var off = 10; all.forEach(function(b){ tag.set(b, off); off += b.length; });
+      return new Blob([tag, blob.slice(audioStart)], { type: 'audio/mpeg' });
+    }
+    var saving = false;
+    async function saveFile(){
+      if(saving) return;
+      var n = Object.keys(stamped).length;
+      if(n === 0 && synthetic){ alert('저장할 시간이 아직 없습니다.\n먼저 문장 시간을 찍어 주세요.'); return; }
+      if(n > 0 && !validateOrder()) return;
+      if(n > 0) commit();
+      else sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chIdx, start: start, end: end, offsets: cur.slice(), rate: rate };
+      var item = (typeof localAudioQueue !== 'undefined' && localAudioQueue[localAudioQueueIndex]) || null;
+      var url = item && item.url ? item.url : ab.currentSrc || ab.src;
+      var name = (item && item.name) ? item.name : '오디오북_시간수정.wav';
+      var isMp3 = /\.mp3$/i.test(name);
+      var saveBtn = q('[data-save]'), saveTxt = saveBtn.textContent;
+      saving = true;
+      var handle = null;
+      // 저장 위치 창은 버튼을 누른 직후에 먼저 열어야 한다 (시간이 걸리는 작업 뒤에는 열리지 않을 수 있음)
+      if(fsAccessAvailable('showSaveFilePicker')){
+        try{
+          handle = await window.showSaveFilePicker({ suggestedName: name, types: [isMp3 ? { description: 'MP3 Audio File', accept: { 'audio/mpeg': ['.mp3'] } } : { description: 'WAV Audio File', accept: { 'audio/wav': ['.wav'] } }] });
+        }catch(err){
+          if(err && err.name === 'AbortError'){ saving = false; setStatus('저장이 취소되었습니다.'); return; }
+          console.warn('저장 창 대신 다운로드로 진행:', err);
+        }
+      }
+      saveBtn.disabled = true; saveBtn.textContent = '저장 중…';
+      try{
+        var blob = await (await fetch(url)).blob();
+        var head = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+        var asStr = function(a, f, l){ return String.fromCharCode.apply(null, Array.from(a.slice(f, f + l))); };
+        var payload = getSyncPayload(chIdx);
+        if(!payload) throw new Error('문장 시간 정보를 만들지 못했습니다.');
+        var out, ext;
+        if(asStr(head, 0, 4) === 'RIFF' && asStr(head, 8, 4) === 'WAVE'){ out = await embedSyncIntoWav(await stripWavSync(blob), payload); ext = 'wav'; }
+        else if(asStr(head, 0, 3) === 'ID3' || (head[0] === 0xFF && (head[1] & 0xE0) === 0xE0)){ out = await putSyncInMp3(blob, payload); ext = 'mp3'; }
+        else throw new Error('WAV 또는 MP3 파일만 저장할 수 있습니다.');
+        if(handle){
+          var w = await handle.createWritable(); await w.write(out); await w.close();
+        } else {
+          var a = document.createElement('a'); a.href = URL.createObjectURL(out);
+          a.download = name.replace(/\.[^.]+$/, '') + '.' + ext; document.body.appendChild(a); a.click();
+          setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+        }
+        setStatus('✅ 고친 문장 시간을 넣은 소리 파일을 저장했어요.');
+        alert('저장했습니다.\n' + (handle ? '' : '다운로드 폴더를 확인해 주세요.\n') + '이 파일을 "파일 연동"으로 연결하면 고친 시간이 적용됩니다.');
+      }catch(err){
+        console.warn('파일 저장 실패', err);
+        alert('파일 저장에 실패했습니다.\n' + (err && err.message ? err.message : err));
+      }finally{
+        saving = false; saveBtn.disabled = false; saveBtn.textContent = saveTxt;
+      }
     }
     function upd(){
       var dur = ab.duration || 0, el = ab.currentTime || 0;
@@ -9349,6 +9459,7 @@ body.day-mode header.border-b {
     q('[data-stamp]').addEventListener('pointerdown', function(e){ e.preventDefault(); doStamp(); });
     q('[data-undo]').addEventListener('click', undo);
     q('[data-fin]').addEventListener('click', finish);
+    q('[data-save]').addEventListener('click', saveFile);
     plBtn.addEventListener('click', function(){ togglePlayPause(); setTimeout(upd, 80); });
     q('[data-st]').addEventListener('click', function(){ try{ stopTTSAndReset(); }catch(e){ ab.pause(); ab.currentTime = 0; } setTimeout(upd, 80); });
     q('[data-rm]').addEventListener('click', function(){ adjustRate(-0.01); upd(); });
