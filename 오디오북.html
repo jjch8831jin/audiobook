@@ -346,6 +346,9 @@ body.day-mode header.border-b {
                 <button type="button" id="btn-find-toggle" onclick="toggleFindPanel()" title="본문에서 단어·문장 찾기" class="shrink-0 px-2.5 py-1 rounded-lg text-[15px] font-bold bg-stone-800 hover:bg-stone-700 text-sky-300 border border-stone-700 active:scale-95 transition flex items-center space-x-1">
                     <i class="fa-solid fa-magnifying-glass text-[15px]"></i>
                 </button>
+                <button type="button" id="btn-time-sync" onclick="openTimeSyncWindow()" title="시간 맞추기 (문장이 시작하는 시간을 소리에 맞춰 다시 찍기)" class="shrink-0 px-2.5 py-1 rounded-lg text-[15px] font-bold bg-stone-800 hover:bg-stone-700 text-rose-300 border border-stone-700 active:scale-95 transition flex items-center space-x-1">
+                    <i class="fa-solid fa-stopwatch text-[15px]"></i>
+                </button>
             </div>
 
             <div id="find-panel" class="hidden" style="background:#ffffff; border:1px solid #d6d3d1; border-radius:16px; padding:10px; box-shadow:0 2px 8px rgba(0,0,0,0.25);">
@@ -3710,7 +3713,16 @@ body.day-mode header.border-b {
                 if (chapterSelect) chapterSelect.value = String(chIdx);
                 if (typeof refreshChapterProgressLabel === 'function') refreshChapterProgressLabel();
             }
-            sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chIdx, start: p.start, end: p.end, offsets, rate: p.rate };
+            let useRate = p.rate;
+            try { // 시간 맞추기로 직접 고친 시간이 있으면(원고가 그대로일 때) 그걸 우선 쓴다
+                const edRaw = localStorage.getItem(`ab_offsets_edit::${currentBookId}::${chIdx}`);
+                if (edRaw) {
+                    const ed = JSON.parse(edRaw);
+                    if (ed && ed.textHash === computeSentencesHash() && ed.sentenceCount === sentences.length &&
+                        Array.isArray(ed.offsets) && ed.offsets.length === offsets.length) { offsets = ed.offsets; useRate = ed.rate || p.rate; }
+                }
+            } catch (e) { /* 무시 */ }
+            sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chIdx, start: p.start, end: p.end, offsets, rate: useRate };
             return true;
         }
 
@@ -9151,5 +9163,191 @@ body.day-mode header.border-b {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     });
   }
+</script>
+
+<style>
+#tsy-back{position:fixed;top:0;left:0;right:0;bottom:0;z-index:300;background:#1c1917;display:flex;flex-direction:column;color:#e7e5e4;font-family:inherit;box-sizing:border-box}
+#tsy-back *{box-sizing:border-box}
+#tsy-head{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#1e3a8a;color:#dbeafe;flex:none}
+#tsy-head b{font-size:20px;white-space:nowrap}
+#tsy-head .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#bfdbfe;font-size:18px}
+.tsy-rb{width:44px;height:44px;border-radius:50%;background:#292524;border:1px solid #57534e;color:#d6d3d1;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;padding:0}
+.tsy-rb:active{transform:scale(.88)}
+#tsy-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;flex:none}
+#tsy-bar .bt{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:#fff;font-size:18px;min-width:3.4em}
+#tsy-sk{flex:1 1 160px;min-width:120px;accent-color:#34d399;cursor:pointer}
+#tsy-rate{display:flex;align-items:center;gap:6px;background:#1c1917;border:1px solid #f59e0b;border-radius:12px;padding:3px 6px}
+#tsy-rate b{min-width:4.4em;text-align:center;color:#fff;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:18px}
+#tsy-rate button{width:32px;height:32px;border-radius:8px;background:#f59e0b;border:0;color:#000;font-weight:800;font-size:18px;cursor:pointer;padding:0}
+#tsy-list{flex:1;min-height:0;overflow:auto;margin:0 16px;background:#171412;border:1px solid #44403c;border-radius:10px;padding:8px}
+.tsy-row{display:flex;gap:16px;align-items:baseline;padding:8px 14px;border-radius:10px;cursor:pointer;color:#d6d3d1}
+.tsy-row:hover{background:#292524}
+.tsy-row .tm{flex:none;min-width:6.6em;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;color:#a8a29e}
+.tsy-row .tx{flex:1;font-size:20px;line-height:1.55}
+.tsy-row.new .tm{color:#34d399}
+.tsy-row.now{background:#14532d}
+.tsy-row.now .tx{color:#34d399;font-weight:700}
+.tsy-row.play .tm::before{content:'▶ ';color:#fcd34d}
+#tsy-foot{display:flex;gap:10px;padding:10px 16px 14px;flex:none}
+#tsy-foot button{height:46px;border-radius:10px;border:1px solid #57534e;background:#44403c;color:#fff;font-size:17px;font-weight:700;cursor:pointer;padding:0 16px;white-space:nowrap}
+#tsy-foot button.go{flex:1;min-width:0;background:#f59e0b;border-color:#f59e0b;color:#1c1917;font-size:20px}
+#tsy-foot button.ok{background:#f59e0b;border-color:#f59e0b;color:#1c1917;padding:0 22px}
+#tsy-foot button:disabled{opacity:.4;cursor:default}
+@media (max-width:600px){#tsy-foot .lg{display:none}#tsy-foot{gap:8px}#tsy-foot button{padding:0 10px}#tsy-foot button.ok{padding:0 14px}}
+</style>
+<script>
+(function(){
+  var win = null;
+  function tsyFmt(x){ x = Math.max(0, x || 0); var m = Math.floor(x / 60), r = x - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); }
+  function clock(x){ return (typeof formatClock === 'function') ? formatClock(x) : String(Math.floor(x || 0)); }
+  window.openTimeSyncWindow = function(){
+    if(win) return;
+    var ab = document.getElementById('local-audiobook-audio');
+    if(!isFullAudioMode || !ab || !(ab.duration > 0) || !sentences || !sentences.length){
+      setStatus('⚠️ 시간 맞추기는 "파일 연동"으로 음성 파일을 연결해서 소리가 준비된 뒤에 쓸 수 있어요.'); return;
+    }
+    var od = (typeof ensureSentenceTimeOffsetsLoaded === 'function') ? ensureSentenceTimeOffsetsLoaded() : null;
+    var odOk = od && Array.isArray(od.offsets) && od.offsets.length === (od.end - od.start) && od.end <= sentences.length;
+    var rate, start, end, base, chIdx = currentChapterIndex, synthetic = false;
+    if(odOk){ rate = od.rate || currentRate || 1; start = od.start; end = od.end; base = od.offsets.slice(); chIdx = od.chapterIndex; }
+    else {
+      var rg = getChapterRanges()[currentChapterIndex] || { start: 0, end: sentences.length };
+      rate = currentRate || 1; start = rg.start; end = rg.end; synthetic = true;
+      base = []; for(var i = 0; i < end - start; i++) base.push((i / (end - start)) * ab.duration * rate);
+    }
+    var cur = base.slice();           // 지금 값 (찍으면 바뀜)
+    var stamped = {};                 // 새로 찍은 문장 (인덱스 → true)
+    var stack = [];                   // 되돌리기용 {i, old, t}
+    var target = 0;                   // 지금 찍을 문장 (상대 인덱스)
+    var dirty = false;
+
+    var back = document.createElement('div'); back.id = 'tsy-back'; back.className = 'fixed inset-0';
+    back.innerHTML =
+      '<div id="tsy-head"><b>시간 맞추기</b><span class="nm"></span><button type="button" class="tsy-rb" data-x title="닫기">✕</button></div>' +
+      '<div id="tsy-bar"><span class="bt" data-ct>00:00</span><input type="range" id="tsy-sk" min="0" max="1000" value="0" step="1"><span class="bt" data-dt>00:00</span>' +
+      '<button type="button" class="tsy-rb" data-pl title="재생">▶</button><button type="button" class="tsy-rb" data-st title="정지(처음으로)">■</button>' +
+      '<span id="tsy-rate" title="속도 조절"><button type="button" data-rm>−</button><b data-rv></b><button type="button" data-rp>+</button></span></div>' +
+      '<div id="tsy-list"></div>' +
+      '<div id="tsy-foot"><button type="button" data-undo>↶ <span class="lg">한 줄&nbsp;</span>되돌리기</button><button type="button" class="go" data-stamp>▶ 이 줄 시작!<span class="lg">&nbsp;(스페이스)</span></button><button type="button" class="ok" data-fin>끝내기</button></div>';
+    document.body.appendChild(back); win = back;
+    var prevOv = document.documentElement.style.overflow; document.documentElement.style.overflow = 'hidden';
+    var q = function(s){ return back.querySelector(s); };
+    var list = q('#tsy-list'), sk = q('#tsy-sk'), ctEl = q('[data-ct]'), dtEl = q('[data-dt]'), plBtn = q('[data-pl]');
+    var chSel = document.getElementById('chapter-select');
+    var chName = chSel && chSel.selectedOptions && chSel.selectedOptions[0] ? chSel.selectedOptions[0].textContent : '';
+    var bt = document.getElementById('current-book-title');
+    q('.nm').textContent = ((bt && bt.textContent) || '') + (chName ? ' · ' + chName : '') + (synthetic ? ' · (기존 시간 없음: 균등 분할 값)' : '');
+
+    var rows = [];
+    for(var k = 0; k < end - start; k++){
+      (function(k){
+        var r = document.createElement('div'); r.className = 'tsy-row';
+        var tm = document.createElement('span'); tm.className = 'tm';
+        var tx = document.createElement('span'); tx.className = 'tx'; tx.textContent = sentences[start + k];
+        r.appendChild(tm); r.appendChild(tx); list.appendChild(r);
+        r.addEventListener('click', function(){ selectTarget(k, true); });
+        rows.push({ el: r, tm: tm });
+      })(k);
+    }
+    function fileTimeOf(i){ return cur[i] / rate; }
+    function paint(scroll){
+      for(var i = 0; i < rows.length; i++){
+        var r = rows[i];
+        r.tm.textContent = (stamped[i] ? '✓ ' : '') + tsyFmt(fileTimeOf(i));
+        r.el.classList.toggle('new', !!stamped[i]);
+        r.el.classList.toggle('now', i === target);
+      }
+      q('[data-undo]').disabled = stack.length === 0;
+      q('[data-stamp]').disabled = false;
+      if(scroll && rows[target]){ var el = rows[target].el; list.scrollTo({ top: el.offsetTop - list.offsetTop - list.clientHeight / 3, behavior: 'smooth' }); }
+    }
+    function selectTarget(i, seek){
+      target = Math.max(0, Math.min(rows.length - 1, i));
+      if(seek){ try{ ab.currentTime = Math.max(0, fileTimeOf(target) - 2); }catch(e){} }
+      paint(true);
+    }
+    function playingIndex(){
+      var t = ab.currentTime * rate, lo = 0, hi = cur.length - 1, f = 0;
+      while(lo <= hi){ var mid = (lo + hi) >> 1; if(cur[mid] <= t){ f = mid; lo = mid + 1; } else hi = mid - 1; }
+      return f;
+    }
+    function doStamp(){
+      if(!rows.length) return;
+      var i = target;
+      stack.push({ i: i, old: cur[i], was: !!stamped[i], t: ab.currentTime });
+      cur[i] = ab.currentTime * rate; stamped[i] = true; dirty = true;
+      target = Math.min(rows.length - 1, i + 1);
+      if(i === rows.length - 1) target = i; // 마지막 문장이면 그대로
+      paint(true);
+    }
+    function undo(){
+      if(!stack.length) return;
+      var u = stack.pop();
+      cur[u.i] = u.old; if(!u.was) delete stamped[u.i];
+      target = u.i; dirty = stack.length > 0 || Object.keys(stamped).length > 0;
+      try{ if(!ab.paused) pauseTTS(); if(!ab.paused) ab.pause(); }catch(e){ try{ ab.pause(); }catch(x){} }
+      try{ ab.currentTime = Math.max(0, u.t); }catch(e){}
+      paint(true); upd();
+    }
+    function close(force){
+      if(!force && dirty && !confirm('저장하지 않은 변경이 있습니다. 그래도 닫을까요?')) return;
+      document.removeEventListener('keydown', onKey, true); clearInterval(timer);
+      document.documentElement.style.overflow = prevOv; back.remove(); win = null;
+    }
+    function finish(){
+      var n = Object.keys(stamped).length;
+      if(!n){ close(true); return; }
+      for(var i = 1; i < cur.length; i++){
+        if(cur[i] < cur[i - 1]){
+          alert('시간 순서가 맞지 않습니다.\n' + (start + i + 1) + '번 문장의 시간(' + tsyFmt(fileTimeOf(i)) + ')이 바로 앞 문장(' + tsyFmt(fileTimeOf(i - 1)) + ')보다 빠릅니다.\n그 문장을 눌러서 다시 찍어 주세요.');
+          selectTarget(i, false); return;
+        }
+      }
+      if(!confirm('찍은 ' + n + '개 문장의 시간으로 기존 시간을 바꿉니다. 저장할까요?')) return;
+      var rec = { start: start, end: end, offsets: cur.slice(), rate: rate };
+      sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chIdx, start: start, end: end, offsets: cur.slice(), rate: rate };
+      try {
+        localStorage.setItem('ab_offsets::' + currentBookId + '::' + chIdx, JSON.stringify(rec));
+        localStorage.setItem('ab_offsets_edit::' + currentBookId + '::' + chIdx, JSON.stringify({ start: start, end: end, offsets: cur.slice(), rate: rate, textHash: computeSentencesHash(), sentenceCount: sentences.length }));
+      } catch(e) { console.warn('시간 저장 실패', e); }
+      dirty = false; close(true);
+      setStatus('✅ 문장 시간 ' + n + '개를 저장했어요. 이제 문장을 누르거나 재생하면 새 시간으로 따라갑니다.');
+    }
+    function upd(){
+      var dur = ab.duration || 0, el = ab.currentTime || 0;
+      if(!sk._drag){ sk.value = dur > 0 ? Math.round(Math.min(1, el / dur) * 1000) : 0; ctEl.textContent = clock(el); }
+      dtEl.textContent = clock(dur);
+      var on = !ab.paused;
+      plBtn.textContent = on ? '⏸' : '▶'; plBtn.title = on ? '일시정지' : '재생'; plBtn.style.color = on ? '#fcd34d' : '#6ee7b7';
+      q('[data-rv]').textContent = (currentRate || 1).toFixed(2) + 'x';
+      var pi = playingIndex();
+      for(var i = 0; i < rows.length; i++) rows[i].el.classList.toggle('play', on && i === pi);
+    }
+    var timer = setInterval(upd, 200);
+    function onKey(e){
+      if(e.code === 'Space'){
+        e.preventDefault(); e.stopPropagation();
+        try{ document.activeElement.blur(); }catch(x){}
+        if(!e.repeat) doStamp();
+      } else if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); close(false); }
+    }
+    document.addEventListener('keydown', onKey, true);
+    q('[data-x]').addEventListener('click', function(){ close(false); });
+    q('[data-stamp]').addEventListener('pointerdown', function(e){ e.preventDefault(); doStamp(); });
+    q('[data-undo]').addEventListener('click', undo);
+    q('[data-fin]').addEventListener('click', finish);
+    plBtn.addEventListener('click', function(){ togglePlayPause(); setTimeout(upd, 80); });
+    q('[data-st]').addEventListener('click', function(){ try{ stopTTSAndReset(); }catch(e){ ab.pause(); ab.currentTime = 0; } setTimeout(upd, 80); });
+    q('[data-rm]').addEventListener('click', function(){ adjustRate(-0.01); upd(); });
+    q('[data-rp]').addEventListener('click', function(){ adjustRate(0.01); upd(); });
+    sk.addEventListener('pointerdown', function(){ sk._drag = true; });
+    sk.addEventListener('input', function(){ ctEl.textContent = clock(sk.value / 1000 * (ab.duration || 0)); });
+    sk.addEventListener('change', function(){ sk._drag = false; try{ ab.currentTime = sk.value / 1000 * (ab.duration || 0); }catch(e){} });
+    sk.addEventListener('pointerup', function(){ setTimeout(function(){ sk._drag = false; }, 0); });
+    // 지금 소리가 나오는 문장부터 시작 문장으로
+    var startIdx = Math.max(0, Math.min(rows.length - 1, (typeof currentIndex === 'number' ? currentIndex - start : 0)));
+    target = startIdx; paint(true); upd();
+  };
+})();
 </script>
 </body></html>
