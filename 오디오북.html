@@ -9179,7 +9179,9 @@ body.day-mode header.border-b {
 #tsy-rate{display:flex;align-items:center;gap:6px;background:#fffdf4;border:1px solid #f59e0b;border-radius:12px;padding:3px 6px}
 #tsy-rate b{min-width:4.4em;text-align:center;color:#1c1917;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:18px}
 #tsy-rate button{width:32px;height:32px;border-radius:8px;background:#f59e0b;border:0;color:#000;font-weight:800;font-size:18px;cursor:pointer;padding:0}
-#tsy-list{flex:1;min-height:0;overflow:auto;margin:0 16px;background:#fffdf5;border:1px solid #d9cfb0;border-radius:10px;padding:8px}
+#tsy-wrap{position:relative;flex:1;min-height:0;display:flex;margin:0 16px}
+.tsy-ind{display:none;position:absolute;left:50%;transform:translateX(-50%);z-index:2;background:#9a3412;color:#fff;border:0;border-radius:999px;padding:8px 18px;font-size:17px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);white-space:nowrap}
+#tsy-list{flex:1;min-height:0;overflow:auto;margin:0;background:#fffdf5;border:1px solid #d9cfb0;border-radius:10px;padding:8px}
 .tsy-row{display:flex;gap:16px;align-items:baseline;padding:6px 12px;border:3px solid transparent;border-radius:10px;cursor:pointer;color:#000}
 .tsy-row:hover{background:#f3ecd6}
 .tsy-row .tm{flex:none;min-width:6.6em;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;color:#57534e}
@@ -9233,7 +9235,7 @@ body.day-mode header.border-b {
       '<div id="tsy-bar"><span class="bt" data-ct>00:00</span><input type="range" id="tsy-sk" min="0" max="1000" value="0" step="1"><span class="bt" data-dt>00:00</span>' +
       '<button type="button" class="tsy-rb" data-pl title="재생">▶</button><button type="button" class="tsy-rb" data-st title="정지(처음으로)">■</button>' +
       '<span id="tsy-rate" title="속도 조절"><button type="button" data-rm>−</button><b data-rv></b><button type="button" data-rp>+</button></span></div>' +
-      '<div id="tsy-list"></div>' +
+      '<div id="tsy-wrap"><div id="tsy-list"></div><button type="button" id="tsy-up" class="tsy-ind" style="top:8px"></button><button type="button" id="tsy-dn" class="tsy-ind" style="bottom:8px"></button></div>' +
       '<div id="tsy-foot"><button type="button" data-undo>↶ <span class="lg">한 줄&nbsp;</span>되돌리기</button><button type="button" class="go" data-stamp>▶ 이 줄 시작!<span class="lg">&nbsp;(스페이스)</span></button><button type="button" class="ok" data-fin>끝내기</button><button type="button" class="ok" data-save>파일저장</button></div>';
     document.body.appendChild(back); win = back;
     var prevOv = document.documentElement.style.overflow; document.documentElement.style.overflow = 'hidden';
@@ -9297,7 +9299,7 @@ body.day-mode header.border-b {
     }
     function close(force){
       if(!force && dirty && !confirm('저장하지 않은 변경이 있습니다. 그래도 닫을까요?')) return;
-      document.removeEventListener('keydown', onKey, true); clearInterval(timer);
+      document.removeEventListener('keydown', onKey, true); document.removeEventListener('keyup', onKeyUp, true); clearInterval(timer);
       document.documentElement.style.overflow = prevOv; back.remove(); win = null;
     }
     function validateOrder(){
@@ -9436,25 +9438,32 @@ body.day-mode header.border-b {
       q('[data-rv]').textContent = (currentRate || 1).toFixed(2) + 'x';
       var pi = playingIndex();
       for(var i = 0; i < rows.length; i++) rows[i].el.classList.toggle('play', on && i === pi);
-      if(on && pi !== lastPi && rows[pi]){ var pe = rows[pi].el; list.scrollTo({ top: pe.offsetTop - list.offsetTop - list.clientHeight / 3, behavior: 'smooth' }); }
-      if(!on) lastPi = -1; else lastPi = pi;
-      // 재생 중이면 ▶가 가리키는 줄이 화면에 따라오게 (직접 스크롤한 뒤 4초 동안은 가만히 둠)
-      if(on && pi !== lastPlayIdx){
-        lastPlayIdx = pi;
-        if(Date.now() - lastUserScroll > 4000 && rows[pi]){ var pe = rows[pi].el; list.scrollTo({ top: pe.offsetTop - list.offsetTop - list.clientHeight / 3, behavior: 'smooth' }); }
-      } else if(!on){ lastPlayIdx = -1; }
+      // 소리가 나오는 문장이 화면 밖이면 위/아래에 알림을 보여 준다 (누르면 그 문장으로 이동)
+      var upB = q('#tsy-up'), dnB = q('#tsy-dn'), showUp = false, showDn = false;
+      if(on && rows[pi]){
+        var pr = rows[pi].el, top = pr.offsetTop - list.offsetTop - list.scrollTop, bot = top + pr.offsetHeight;
+        if(bot < 0){ showUp = true; upB.textContent = '▲ 소리 나오는 곳: ' + (start + pi + 1) + '번 문장'; upB._i = pi; }
+        else if(top > list.clientHeight){ showDn = true; dnB.textContent = '▼ 소리 나오는 곳: ' + (start + pi + 1) + '번 문장'; dnB._i = pi; }
+      }
+      upB.style.display = showUp ? 'block' : 'none'; dnB.style.display = showDn ? 'block' : 'none';
     }
-    var lastPlayIdx = -1, lastUserScroll = 0;
-    ['wheel', 'touchstart', 'touchmove'].forEach(function(ev){ list.addEventListener(ev, function(){ lastUserScroll = Date.now(); }, { passive: true }); });
     var lastPi = -1;
+    function goPlay(b){ var r = rows[b._i]; if(r) list.scrollTo({ top: r.el.offsetTop - list.offsetTop - list.clientHeight / 3, behavior: 'smooth' }); }
+    q('#tsy-up').addEventListener('click', function(){ goPlay(this); });
+    q('#tsy-dn').addEventListener('click', function(){ goPlay(this); });
     var timer = setInterval(upd, 200);
     function onKey(e){
       if(e.code === 'Space'){
         e.preventDefault(); e.stopPropagation();
         try{ document.activeElement.blur(); }catch(x){}
         if(!e.repeat) doStamp();
+      } else if(e.key === 'Alt'){
+        e.preventDefault(); e.stopPropagation();
+        if(!e.repeat){ var ub = q('[data-undo]'); if(ub && !ub.disabled) ub.click(); }
       } else if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); close(false); }
     }
+    function onKeyUp(e){ if(e.key === 'Alt'){ e.preventDefault(); e.stopPropagation(); } }
+    document.addEventListener('keyup', onKeyUp, true);
     document.addEventListener('keydown', onKey, true);
     q('[data-x]').addEventListener('click', function(){ close(false); });
     q('[data-stamp]').addEventListener('pointerdown', function(e){ e.preventDefault(); doStamp(); });
