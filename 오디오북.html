@@ -9228,6 +9228,7 @@ body.day-mode header.border-b {
     var stack = [];                   // 되돌리기용 {i, old, t}
     var target = 0;                   // 지금 찍을 문장 (상대 인덱스)
     var dirty = false;
+    var afterStamp = false;           // 방금 찍은 줄에 초록줄이 있음 → 다음 스페이스는 한 줄 내려가서 찍음
 
     var back = document.createElement('div'); back.id = 'tsy-back'; back.className = 'fixed inset-0';
     back.innerHTML =
@@ -9270,7 +9271,7 @@ body.day-mode header.border-b {
       if(scroll && rows[target]){ var el = rows[target].el; list.scrollTo({ top: el.offsetTop - list.offsetTop - list.clientHeight / 3, behavior: 'smooth' }); }
     }
     function selectTarget(i, seek){
-      target = Math.max(0, Math.min(rows.length - 1, i));
+      target = Math.max(0, Math.min(rows.length - 1, i)); afterStamp = false;
       if(seek){ try{ ab.currentTime = Math.max(0, fileTimeOf(target) - 2); }catch(e){} }
       paint(true);
     }
@@ -9281,11 +9282,11 @@ body.day-mode header.border-b {
     }
     function doStamp(){
       if(!rows.length) return;
+      if(afterStamp && target < rows.length - 1) target++;
       var i = target;
       stack.push({ i: i, old: cur[i], was: !!stamped[i], t: ab.currentTime });
       cur[i] = ab.currentTime * rate; stamped[i] = true; dirty = true;
-      target = Math.min(rows.length - 1, i + 1);
-      if(i === rows.length - 1) target = i; // 마지막 문장이면 그대로
+      afterStamp = true;
       paint(true);
     }
     function backTen(){
@@ -9298,7 +9299,7 @@ body.day-mode header.border-b {
       var n0 = ab.currentTime || 0;
       var u = stack.pop();
       cur[u.i] = u.old; if(!u.was) delete stamped[u.i];
-      target = u.i; dirty = stack.length > 0 || Object.keys(stamped).length > 0;
+      target = u.i; afterStamp = false; dirty = stack.length > 0 || Object.keys(stamped).length > 0;
       try{ if(!ab.paused) pauseTTS(); if(!ab.paused) ab.pause(); }catch(e){ try{ ab.pause(); }catch(x){} }
       try{ ab.currentTime = Math.max(0, n0 - 10); }catch(e){}
       paint(true); upd();
