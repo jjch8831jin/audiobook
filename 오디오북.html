@@ -9192,6 +9192,7 @@ body.day-mode header.border-b {
 .tsy-row.play .tx{color:#9a3412;font-weight:700}
 .tsy-row.play .tm{color:#9a3412}
 .tsy-row.play .tm::before{content:'▶ ';color:#c2410c}
+.tsy-ta{flex:1;min-width:0;font-size:20px;line-height:1.55;font-family:inherit;color:#000;background:#fff;border:2px solid #2563eb;border-radius:8px;padding:4px 8px;resize:none;overflow:hidden;box-sizing:border-box}
 #tsy-foot{display:flex;gap:10px;padding:10px 16px 14px;flex:none}
 #tsy-foot button{height:46px;border-radius:10px;border:1px solid #b8ad8a;background:#e7dfc6;color:#1c1917;font-size:17px;font-weight:700;cursor:pointer;padding:0 16px;white-space:nowrap}
 #tsy-foot button.go{flex:1;min-width:0;background:#f59e0b;border-color:#f59e0b;color:#1c1917;font-size:20px}
@@ -9248,15 +9249,171 @@ body.day-mode header.border-b {
     q('.nm').textContent = ((bt && bt.textContent) || '') + (chName ? ' · ' + chName : '') + (synthetic ? ' · (기존 시간 없음: 균등 분할 값)' : '');
 
     var rows = [];
-    for(var k = 0; k < end - start; k++){
-      (function(k){
-        var r = document.createElement('div'); r.className = 'tsy-row';
-        var tm = document.createElement('span'); tm.className = 'tm';
-        var tx = document.createElement('span'); tx.className = 'tx'; tx.textContent = sentences[start + k];
-        r.appendChild(tm); r.appendChild(tx); list.appendChild(r);
-        r.addEventListener('click', function(){ selectTarget(k, true); });
-        rows.push({ el: r, tm: tm });
-      })(k);
+    var txt = [], meta = [];
+    for(var k0 = 0; k0 < end - start; k0++){ txt.push(sentences[start + k0]); meta.push({ oi: start + k0, last: start + k0 }); }
+    var origEnd = end, textDirty = false, structDirty = false, editIdx = -1;
+    function mkRow(k){
+      var r = document.createElement('div'); r.className = 'tsy-row';
+      var tm = document.createElement('span'); tm.className = 'tm';
+      var tx = document.createElement('span'); tx.className = 'tx'; tx.textContent = txt[k];
+      r.appendChild(tm); r.appendChild(tx); list.appendChild(r);
+      r.addEventListener('click', function(ev){
+        if(editIdx === k) return;
+        if(k === target && ev.target === tx) startEdit(k); else selectTarget(k, true);
+      });
+      rows.push({ el: r, tm: tm, tx: tx, ta: null });
+    }
+    function renderRows(){
+      list.innerHTML = ''; rows = [];
+      for(var k = 0; k < txt.length; k++) mkRow(k);
+    }
+    renderRows();
+    function detachEdit(){
+      if(editIdx < 0) return null;
+      var k = editIdx, r = rows[k]; editIdx = -1;
+      var ta = r && r.ta; if(!ta) return null;
+      r.ta = null; var v = ta.value; ta.remove(); r.tx.style.display = '';
+      return v;
+    }
+    function endEdit(){
+      if(editIdx < 0) return;
+      var k = editIdx, v = detachEdit();
+      if(v === null) return;
+      v = v.replace(/\s*\n\s*/g, ' ').trim();
+      if(v && v !== txt[k]){ txt[k] = v; textDirty = true; dirty = true; }
+      rows[k].tx.textContent = txt[k];
+    }
+    function startEdit(k, caret){
+      endEdit();
+      var r = rows[k]; if(!r) return;
+      var ta = document.createElement('textarea'); ta.className = 'tsy-ta'; ta.rows = 1; ta.value = txt[k];
+      var grow = function(){ ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; };
+      ta.addEventListener('input', grow);
+      ta.addEventListener('blur', function(){ if(editIdx === k && r.ta === ta) endEdit(); });
+      ta.addEventListener('click', function(e){ e.stopPropagation(); });
+      ta.addEventListener('keydown', function(e){
+        e.stopPropagation();
+        if(e.isComposing || e.keyCode === 229) return;
+        if(e.key === 'Escape'){ e.preventDefault(); endEdit(); try{ document.activeElement.blur(); }catch(x){} }
+        else if(e.key === 'Enter'){ e.preventDefault(); splitAt(k, ta.selectionStart, ta.value); }
+        else if(e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0){ e.preventDefault(); mergeUp(k, ta.value); }
+      });
+      r.tx.style.display = 'none'; r.el.appendChild(ta); r.ta = ta; editIdx = k;
+      grow();
+      try{ ta.focus({ preventScroll: true }); }catch(e){ ta.focus(); }
+      var c = (typeof caret === 'number') ? caret : ta.value.length;
+      try{ ta.setSelectionRange(c, c); }catch(e){}
+    }
+    function shiftStamped(at, delta){
+      var ns = {};
+      Object.keys(stamped).forEach(function(key){
+        var i = +key;
+        if(delta > 0) ns[i >= at ? i + 1 : i] = true;
+        else if(i !== at) ns[i > at ? i - 1 : i] = true;
+      });
+      stamped = ns;
+    }
+    function structChanged(){
+      stack = []; end = start + txt.length; structDirty = true; textDirty = true; dirty = true;
+    }
+    function splitAt(k, pos, val){
+      var p1 = val.slice(0, pos).replace(/\s*\n\s*/g, ' ').trim(), p2 = val.slice(pos).replace(/\s*\n\s*/g, ' ').trim();
+      if(!p1 || !p2) return;
+      detachEdit();
+      txt[k] = p1; txt.splice(k + 1, 0, p2);
+      meta.splice(k + 1, 0, { oi: meta[k].last, last: meta[k].last, part: true });
+      cur.splice(k + 1, 0, cur[k]); shiftStamped(k + 1, 1);
+      structChanged(); renderRows();
+      target = k + 1; afterStamp = false; paint(true);
+      startEdit(k + 1, 0);
+    }
+    function mergeUp(k, val){
+      if(k === 0) return;
+      var v = val.replace(/\s*\n\s*/g, ' ').trim();
+      detachEdit();
+      var junction = txt[k - 1].length;
+      // 앞 문장이 마침표/물음표/느낌표로 끝나면 띄어쓰기를 넣을 때 앱이 다시 나누므로, 그때는 붙여서 합친다
+      txt[k - 1] = v ? txt[k - 1] + (/[^0-9][.?!]$/.test(txt[k - 1]) ? '' : ' ') + v : txt[k - 1];
+      meta[k - 1].last = meta[k].last;
+      txt.splice(k, 1); meta.splice(k, 1); cur.splice(k, 1); shiftStamped(k, -1);
+      structChanged(); renderRows();
+      target = k - 1; afterStamp = false; paint(true);
+      startEdit(k - 1, junction);
+    }
+    function splitSentencesLike(t){
+      return collapseSoftLineBreaks(t).split(/(?<=[^0-9][.?!])\s+|\n+/).map(function(x){ return x.trim(); }).filter(function(x){ return x.length > 0; });
+    }
+    // 고친 글자를 원고(본문)에 반영한다. 성공하면 true
+    function applyTextEdits(){
+      endEdit();
+      if(!textDirty) return true;
+      var text = window.__currentBookText;
+      if(typeof text !== 'string'){ alert('원고 원문을 찾지 못해 글자를 저장할 수 없습니다.\n원고를 다시 불러온 뒤 시도해 주세요.'); return false; }
+      var spans = getSentenceSpans(text);
+      if(spans.length !== sentences.length){ alert('문장 위치가 원고와 맞지 않아 글자를 저장하지 않았습니다.\n원고를 다시 불러온 뒤 시도해 주세요.'); return false; }
+      var oldS = sentences, body = '';
+      for(var k = 0; k < txt.length; k++){
+        var m = meta[k];
+        var unmod = !m.part && m.oi === m.last && txt[k] === String(oldS[m.oi]);
+        body += unmod ? text.slice(spans[m.oi][0], spans[m.oi][1]) : txt[k];
+        if(k < txt.length - 1){
+          var nx = meta[k + 1];
+          if(m.last + 1 === nx.oi) body += text.slice(spans[m.last][1], spans[nx.oi][0]);
+          else body += '\n\n';
+        }
+      }
+      var newFull = text.slice(0, spans[start][0]) + body + text.slice(spans[origEnd - 1][1]);
+      var expected = oldS.slice(0, start).concat(txt, oldS.slice(origEnd));
+      var got = splitSentencesLike(newFull), bad = -1;
+      var mn = Math.min(got.length, expected.length);
+      for(var i = 0; i < mn; i++){ if(got[i] !== expected[i]){ bad = i; break; } }
+      if(bad < 0 && got.length !== expected.length) bad = mn;
+      if(bad >= 0){
+        var bi = Math.max(0, bad - start);
+        alert('고친 글자를 그대로 저장하면 문장이 다르게 나뉘어서 저장하지 않았습니다.\n(' + (bi + 1) + '번째 줄 근처)\n문장 안에 "마침표/물음표/느낌표 + 띄어쓰기"가 있으면 거기서 문장이 나뉩니다. 나누려면 엔터로 나눠 주세요.');
+        return false;
+      }
+      var titleEl2 = document.getElementById('current-book-title');
+      var title = titleEl2 ? titleEl2.textContent : '', persisted = false;
+      if(typeof currentDraftId !== 'undefined' && currentDraftId){
+        try{
+          var drafts = getSavedCustomDrafts(), di = drafts.findIndex(function(d){ return d.id === currentDraftId; });
+          if(di >= 0 && String(drafts[di].text).trim() === text.trim()){
+            drafts[di] = Object.assign({}, drafts[di], { text: newFull });
+            localStorage.setItem('audiobook_custom_drafts', JSON.stringify(drafts));
+            persisted = true; title = drafts[di].title || title;
+          }
+        }catch(e){ alert('원고를 저장하지 못했습니다.\n브라우저 저장 공간이 막혀 있거나 가득 찼을 수 있습니다.'); return false; }
+      }
+      var oldId = currentBookId;
+      sentences = expected; window.__currentBookText = newFull;
+      currentBookId = computeBookId(title, newFull);
+      try{ // 이 장이 아닌 다른 장의 시간 기록은 새 원고 번호로 옮긴다 (문장 수가 달라졌으면 앞쪽 장만)
+        var keys = []; for(var q2 = 0; q2 < localStorage.length; q2++) keys.push(localStorage.key(q2));
+        keys.forEach(function(key){
+          var mm = key && key.match(/^(ab_offsets(?:_edit)?)::(.*)::(\d+)$/);
+          if(!mm || mm[2] !== oldId) return;
+          var c = +mm[3];
+          if(c === chIdx) return;
+          if(structDirty && c > chIdx) return;
+          localStorage.setItem(mm[1] + '::' + currentBookId + '::' + c, localStorage.getItem(key));
+        });
+      }catch(e){}
+      var hadStruct = structDirty;
+      end = start + txt.length; origEnd = end;
+      meta = []; for(var k2 = 0; k2 < txt.length; k2++) meta.push({ oi: start + k2, last: start + k2 });
+      textDirty = false; structDirty = false;
+      try{
+        renderSentences(); updateProgressUI(); highlightCurrentSentence();
+        if(typeof updateTotalCharCountDisplay === 'function') updateTotalCharCountDisplay();
+        if(hadStruct){
+          var sel = document.getElementById('chapter-select');
+          if(sel){ var rr = getChapterRanges(); sel.innerHTML = rr.map(function(r, idx){ return '<option value="' + idx + '">챕터 ' + (idx + 1) + ' (' + (r.start + 1) + '~' + r.end + '번 문장)</option>'; }).join(''); sel.value = String(currentChapterIndex); }
+        }
+      }catch(e){ console.warn('화면 갱신 실패', e); }
+      setStatus(persisted ? '✏️ 고친 글자를 원고에 저장했어요.' + (hadStruct ? ' (문장 수가 바뀌어서 이 장 뒤쪽 장의 시간은 다시 맞춰야 할 수 있어요.)' : '')
+                          : '✏️ 글자를 고쳤어요. (서재의 원고에는 저장되지 않은 화면이라, 다시 불러오면 원래대로 돌아가요.)');
+      return true;
     }
     function fileTimeOf(i){ return cur[i] / rate; }
     function paint(scroll){
@@ -9332,12 +9489,16 @@ body.day-mode header.border-b {
       dirty = false;
     }
     function finish(){
+      endEdit();
       var n = Object.keys(stamped).length;
-      if(!n){ close(true); return; }
-      if(!validateOrder()) return;
-      if(!confirm('찍은 ' + n + '개 문장의 시간으로 기존 시간을 바꿉니다. 저장할까요?')) return;
-      commit(); close(true);
-      setStatus('✅ 문장 시간 ' + n + '개를 저장했어요. 이제 문장을 누르거나 재생하면 새 시간으로 따라갑니다.');
+      if(!n && !textDirty){ close(true); return; }
+      var needT = n > 0 || structDirty;
+      if(needT && !validateOrder()) return;
+      if(!confirm((n ? '찍은 ' + n + '개 문장의 시간으로 기존 시간을 바꿉니다. ' : '') + (textDirty ? '고친 글자도 원고에 저장합니다. ' : '') + '저장할까요?')) return;
+      if(!applyTextEdits()) return;
+      if(needT) commit();
+      close(true);
+      setStatus('✅ ' + (n ? '문장 시간 ' + n + '개를 저장했어요. 이제 문장을 누르거나 재생하면 새 시간으로 따라갑니다.' : '고친 글자를 저장했어요.'));
     }
     // ---- 소리 파일에 시간을 넣어 저장 ----
     function u32(dv, o, le){ return dv.getUint32(o, le); }
@@ -9392,10 +9553,14 @@ body.day-mode header.border-b {
     var saving = false;
     async function saveFile(){
       if(saving) return;
+      endEdit();
       var n = Object.keys(stamped).length;
-      if(n === 0 && synthetic){ alert('저장할 시간이 아직 없습니다.\n먼저 문장 시간을 찍어 주세요.'); return; }
-      if(n > 0 && !validateOrder()) return;
-      if(n > 0) commit();
+      if(n === 0 && synthetic && !textDirty){ alert('저장할 시간이 아직 없습니다.\n먼저 문장 시간을 찍어 주세요.'); return; }
+      var needT = n > 0 || structDirty;
+      if(needT && !validateOrder()) return;
+      var tchg = textDirty;
+      if(!applyTextEdits()) return;
+      if(needT || tchg) commit();
       else sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: chIdx, start: start, end: end, offsets: cur.slice(), rate: rate };
       var item = (typeof localAudioQueue !== 'undefined' && localAudioQueue[localAudioQueueIndex]) || null;
       var url = item && item.url ? item.url : ab.currentSrc || ab.src;
@@ -9464,6 +9629,7 @@ body.day-mode header.border-b {
     q('#tsy-dn').addEventListener('click', function(){ goPlay(this); });
     var timer = setInterval(upd, 200);
     function onKey(e){
+      if(editIdx >= 0) return;
       if(e.code === 'Space'){
         e.preventDefault(); e.stopPropagation();
         try{ document.activeElement.blur(); }catch(x){}
@@ -9475,9 +9641,7 @@ body.day-mode header.border-b {
         e.preventDefault(); e.stopPropagation();
         try{ document.activeElement.blur(); }catch(x){}
         selectTarget(target + (e.key === 'ArrowDown' ? 1 : -1), false);
-      } else if(e.key === 'Enter'){
-        e.preventDefault(); e.stopPropagation();
-        try{ document.activeElement.blur(); }catch(x){}
+      } else if(e.key === 'Shift'){
         if(!e.repeat && ab.paused){ togglePlayPause(); setTimeout(upd, 80); }
       } else if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); close(false); }
     }
