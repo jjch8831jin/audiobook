@@ -9287,6 +9287,10 @@ body.day-mode header.border-b {
       stack.push({ i: i, old: cur[i], was: !!stamped[i], t: ab.currentTime });
       cur[i] = ab.currentTime * rate; stamped[i] = true; dirty = true;
       afterStamp = true;
+      // 윗문장·아랫문장(새로 찍은 것끼리)과 시간 순서가 안 맞으면 자동 일시정지
+      if((i > 0 && stamped[i - 1] && cur[i] < cur[i - 1]) || (i < rows.length - 1 && stamped[i + 1] && cur[i] > cur[i + 1])){
+        try{ if(!ab.paused) pauseTTS(); if(!ab.paused) ab.pause(); }catch(e){ try{ ab.pause(); }catch(x){} }
+      }
       paint(true);
     }
     function backTen(){
