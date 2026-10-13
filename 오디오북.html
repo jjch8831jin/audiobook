@@ -9466,6 +9466,10 @@ body.day-mode header.border-b {
       } else if(e.key === 'Alt'){
         e.preventDefault(); e.stopPropagation();
         if(!e.repeat){ var ub = q('[data-undo]'); if(ub && !ub.disabled) ub.click(); else { backTen(); upd(); } }
+      } else if(e.key === 'ArrowUp' || e.key === 'ArrowDown'){
+        e.preventDefault(); e.stopPropagation();
+        try{ document.activeElement.blur(); }catch(x){}
+        selectTarget(target + (e.key === 'ArrowDown' ? 1 : -1), false);
       } else if(e.key === 'Enter'){
         e.preventDefault(); e.stopPropagation();
         try{ document.activeElement.blur(); }catch(x){}
