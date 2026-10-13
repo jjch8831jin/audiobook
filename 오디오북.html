@@ -9280,7 +9280,12 @@ body.day-mode header.border-b {
       var k = editIdx, v = detachEdit();
       if(v === null) return;
       v = v.replace(/\s*\n\s*/g, ' ').trim();
-      if(v && v !== txt[k]){ txt[k] = v; textDirty = true; dirty = true; }
+      if(!v && meta[k] && meta[k].blank){ // 새로 넣으려던 빈 문장은 글자가 없으면 없던 일로 한다
+        txt.splice(k, 1); meta.splice(k, 1); cur.splice(k, 1); shiftStamped(k, -1);
+        structChanged(); renderRows(); target = Math.max(0, Math.min(rows.length - 1, k - 1)); paint(true);
+        return;
+      }
+      if(v){ if(meta[k]) meta[k].blank = false; if(v !== txt[k]){ txt[k] = v; textDirty = true; dirty = true; } }
       rows[k].tx.textContent = txt[k];
     }
     function startEdit(k, caret){
@@ -9295,7 +9300,14 @@ body.day-mode header.border-b {
         e.stopPropagation();
         if(e.isComposing || e.keyCode === 229) return;
         if(e.key === 'Escape'){ e.preventDefault(); endEdit(); try{ document.activeElement.blur(); }catch(x){} }
-        else if(e.key === 'Enter'){ e.preventDefault(); splitAt(k, ta.selectionStart, ta.value); }
+        else if(e.key === 'Enter'){
+          e.preventDefault();
+          var tv = ta.value.trim(), sp = ta.selectionStart;
+          if(!tv) return;
+          if(sp >= ta.value.length) insertBlank(k, true, ta.value);
+          else if(ta.value.slice(0, sp).trim() === '') insertBlank(k, false, ta.value);
+          else splitAt(k, sp, ta.value);
+        }
         else if(e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0){ e.preventDefault(); mergeUp(k, ta.value); }
       });
       r.tx.style.display = 'none'; r.el.appendChild(ta); r.ta = ta; editIdx = k;
@@ -9326,6 +9338,18 @@ body.day-mode header.border-b {
       structChanged(); renderRows();
       target = k + 1; afterStamp = false; paint(true);
       startEdit(k + 1, 0);
+    }
+    function insertBlank(k, below, val){
+      var v = val.replace(/\s*\n\s*/g, ' ').trim();
+      detachEdit();
+      if(v && v !== txt[k]){ txt[k] = v; textDirty = true; dirty = true; }
+      var at = below ? k + 1 : k;
+      txt.splice(at, 0, '');
+      meta.splice(at, 0, below ? { oi: meta[k].last, last: meta[k].last, part: true, blank: true } : { oi: meta[k].oi, last: meta[k].oi, part: true, blank: true });
+      cur.splice(at, 0, cur[k]); shiftStamped(at, 1);
+      structChanged(); renderRows();
+      target = at; afterStamp = false; paint(true);
+      startEdit(at, 0);
     }
     function mergeUp(k, val){
       if(k === 0) return;
