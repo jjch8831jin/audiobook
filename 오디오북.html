@@ -9228,6 +9228,8 @@ body.day-mode header.border-b {
     var stack = [];                   // 되돌리기용 {i, old, t}
     var target = 0;                   // 지금 찍을 문장 (상대 인덱스)
     var dirty = false;
+    var keepTarget = false;           // 사용자가 직접 고른 줄(클릭/되돌리기)이면 초록줄을 소리가 끌고 가지 않음
+    var lastT = -1, wasPlaying = false;
 
     var back = document.createElement('div'); back.id = 'tsy-back'; back.className = 'fixed inset-0';
     back.innerHTML =
@@ -9271,6 +9273,7 @@ body.day-mode header.border-b {
     }
     function selectTarget(i, seek){
       target = Math.max(0, Math.min(rows.length - 1, i));
+      if(seek) keepTarget = true;
       if(seek){ try{ ab.currentTime = Math.max(0, fileTimeOf(target) - 2); }catch(e){} }
       paint(true);
     }
@@ -9279,8 +9282,14 @@ body.day-mode header.border-b {
       while(lo <= hi){ var mid = (lo + hi) >> 1; if(cur[mid] <= t){ f = mid; lo = mid + 1; } else hi = mid - 1; }
       return f;
     }
+    function followIndex(){
+      var t = ab.currentTime * rate, lo = 0, hi = base.length - 1, f = 0;
+      while(lo <= hi){ var mid = (lo + hi) >> 1; if(base[mid] <= t){ f = mid; lo = mid + 1; } else hi = mid - 1; }
+      return f;
+    }
     function doStamp(){
       if(!rows.length) return;
+      keepTarget = false;
       var i = target;
       stack.push({ i: i, old: cur[i], was: !!stamped[i], t: ab.currentTime });
       cur[i] = ab.currentTime * rate; stamped[i] = true; dirty = true;
@@ -9292,7 +9301,7 @@ body.day-mode header.border-b {
       if(!stack.length) return;
       var u = stack.pop();
       cur[u.i] = u.old; if(!u.was) delete stamped[u.i];
-      target = u.i; dirty = stack.length > 0 || Object.keys(stamped).length > 0;
+      target = u.i; keepTarget = true; dirty = stack.length > 0 || Object.keys(stamped).length > 0;
       try{ if(!ab.paused) pauseTTS(); if(!ab.paused) ab.pause(); }catch(e){ try{ ab.pause(); }catch(x){} }
       try{ ab.currentTime = Math.max(0, u.t); }catch(e){}
       paint(true); upd();
@@ -9436,6 +9445,14 @@ body.day-mode header.border-b {
       var on = !ab.paused;
       plBtn.textContent = on ? '⏸' : '▶'; plBtn.title = on ? '일시정지' : '재생'; plBtn.style.color = on ? '#b45309' : '#047857';
       q('[data-rv]').textContent = (currentRate || 1).toFixed(2) + 'x';
+      // 초록줄이 지금 나오는 문장을 따라가게 한다
+      if(on){
+        var fi = followIndex();
+        var jumped = !wasPlaying || Math.abs(el - lastT) > 1.2;
+        if(jumped && !keepTarget){ if(fi !== target){ target = fi; paint(true); } }
+        else if(fi > target){ target = fi; paint(true); }
+      }
+      wasPlaying = on; lastT = el;
       var pi = playingIndex();
       for(var i = 0; i < rows.length; i++) rows[i].el.classList.toggle('play', on && i === pi);
       // 소리가 나오는 문장이 화면 밖이면 위/아래에 알림을 보여 준다 (누르면 그 문장으로 이동)
@@ -9474,7 +9491,7 @@ body.day-mode header.border-b {
     q('[data-st]').addEventListener('click', function(){ try{ stopTTSAndReset(); }catch(e){ ab.pause(); ab.currentTime = 0; } setTimeout(upd, 80); });
     q('[data-rm]').addEventListener('click', function(){ adjustRate(-0.01); upd(); });
     q('[data-rp]').addEventListener('click', function(){ adjustRate(0.01); upd(); });
-    sk.addEventListener('pointerdown', function(){ sk._drag = true; });
+    sk.addEventListener('pointerdown', function(){ sk._drag = true; keepTarget = false; });
     sk.addEventListener('input', function(){ ctEl.textContent = clock(sk.value / 1000 * (ab.duration || 0)); });
     sk.addEventListener('change', function(){ sk._drag = false; try{ ab.currentTime = sk.value / 1000 * (ab.duration || 0); }catch(e){} });
     sk.addEventListener('pointerup', function(){ setTimeout(function(){ sk._drag = false; }, 0); });
