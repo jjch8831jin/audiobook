@@ -5732,6 +5732,82 @@ body.day-mode header.border-b {
             return { centerY: (r1.top + bottom) / 2, h1: r1.height };
         }
 
+        // ===== 에스컬레이터 스크롤: 소리 재생 시간에 맞춰 읽는 위치(두 문장 짝 안의 어디쯤인지)를 따라 글이 쉬지 않고 천천히 올라간다 =====
+        // 문장별 시작 시간이 있는 오디오북 소리를 재생 중일 때만 동작하고, 그 외(일시정지·시간 정보 없음·브라우저 읽기)는 예전처럼 짝이 바뀔 때 한 번 이동한다.
+        function escalatorOffsets() {
+            if (!isFullAudioMode) return null;
+            const ab = document.getElementById('local-audiobook-audio');
+            if (!ab || ab.paused || ab.ended || !isFinite(ab.duration) || !ab.duration) return null;
+            const od = ensureSentenceTimeOffsetsLoaded();
+            if (!od || !Array.isArray(od.offsets) || od.offsets.length === 0 || od.offsets.length !== (od.end - od.start) || od.end > sentences.length) return null;
+            return { ab, od };
+        }
+        function escLayoutTop(el, list) { // 움직이는 효과(transform)와 상관없는 실제 배치 위치
+            const lr = list.getBoundingClientRect();
+            return lr.top + (el.offsetParent === list ? el.offsetTop : el.offsetTop - list.offsetTop);
+        }
+        function escalatorTick(force) {
+            const eo = escalatorOffsets();
+            if (!eo) return false;
+            const now = Date.now();
+            if (!force && (now < jumpLockUntil || now < (window.__escUserUntil || 0) || now < (window.__escSkipUntil || 0) || now - lastPointerMoveOverText < 1200)) return true;
+            const { ab, od } = eo;
+            const list = document.getElementById('sentence-list');
+            if (!list) return true;
+            const rate = od.rate || currentRate || 1;
+            const t = ab.currentTime * rate; // 속도 1.0x 기준 시간
+            const offs = od.offsets;
+            let k = 0, lo = 0, hi = offs.length - 1;
+            while (lo <= hi) { const mid = (lo + hi) >> 1; if (offs[mid] <= t) { k = mid; lo = mid + 1; } else hi = mid - 1; }
+            // 문장 표시(짝)와 위치 계산이 같은 순간에 맞물리도록, 지금 시간에 해당하는 문장이 바뀌었으면 여기서 바로 표시를 바꾼다
+            if (!force) {
+                let ci = od.start + k; if (ci >= sentences.length) ci = sentences.length - 1;
+                if (ci !== currentIndex) { currentIndex = ci; highlightCurrentSentence(); return true; }
+            }
+            const total = ab.duration * rate;
+            const T = (j) => (j < od.start ? offs[0] : (j >= od.end ? Math.max(total, offs[offs.length - 1] + 1) : offs[j - od.start]));
+            const pf = ((od.start + k) >> 1) * 2;
+            const e1 = document.getElementById(`sentence-${pf}`);
+            if (!e1) return true;
+            const e2 = document.getElementById(`sentence-${pf + 1}`) || e1;
+            const t0 = T(pf), t1 = T(pf + 2);
+            const g = t1 > t0 ? Math.min(1, Math.max(0, (t - t0) / (t1 - t0))) : 0;
+            const nx = document.getElementById(`sentence-${pf + 2}`); // 다음 짝의 맨 위까지가 이 짝의 구간 → 짝이 바뀌는 순간에도 끊김 없이 이어짐
+            const top1 = escLayoutTop(e1, list), bot2 = nx ? escLayoutTop(nx, list) : escLayoutTop(e2, list) + e2.offsetHeight;
+            const anchorY = top1 + g * (bot2 - top1);
+            let scroller = null, base, avail;
+            if (isReaderFullscreen) {
+                scroller = document.getElementById('reader-container');
+                if (!scroller) return true;
+                const tb = document.getElementById('reader-fullscreen-title-bar');
+                const tbh = tb ? tb.getBoundingClientRect().height : 0;
+                const cr = scroller.getBoundingClientRect();
+                base = cr.top + tbh; avail = cr.height - tbh;
+            } else {
+                const header = document.querySelector('header'), tc = document.getElementById('reader-title-card');
+                base = (header ? header.getBoundingClientRect().height : 0) + (tc ? tc.getBoundingClientRect().height : 0);
+                avail = window.innerHeight - base;
+            }
+            const targetY = base + avail / 2 - e1.offsetHeight; // 가운데보다 한 문장 위
+            const delta = anchorY - targetY;
+            if (Math.abs(delta) < 0.3) return true;
+            const sc = scroller || window;
+            if (!force && Math.abs(delta) > 200) { // 많이 벗어났으면(스크롤을 만졌거나 이동 직후) 한 번 부드럽게 따라붙는다
+                sc.scrollBy({ top: delta, behavior: 'smooth' });
+                window.__escSkipUntil = now + 700;
+            } else {
+                sc.scrollBy({ top: delta, behavior: 'instant' });
+            }
+            return true;
+        }
+        function escalatorLoop() { window.__escRaf = 0; if (escalatorTick(false)) window.__escRaf = requestAnimationFrame(escalatorLoop); }
+        function escalatorStart() { if (!window.__escRaf) window.__escRaf = requestAnimationFrame(escalatorLoop); }
+        ['wheel', 'touchstart', 'touchmove', 'mousedown', 'keydown'].forEach(ev => window.addEventListener(ev, () => { window.__escUserUntil = Date.now() + 2500; }, { passive: true, capture: true }));
+        (function () {
+            const attach = () => { const ab = document.getElementById('local-audiobook-audio'); if (ab) { ab.addEventListener('play', escalatorStart); ab.addEventListener('playing', escalatorStart); } };
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach); else attach();
+        })();
+
         function scrollSentenceToCenter(el, behavior) {
             if (!el) return false;
             behavior = behavior || 'smooth';
@@ -5846,12 +5922,16 @@ body.day-mode header.border-b {
                 window.__lastPairEl = pairFirstEl;
                 const oldNo = window.__lastPairNo;
                 window.__lastPairNo = pairNo;
+                const esc = !!escalatorOffsets(); // 에스컬레이터 중이면 위치는 계속 따라가는 쪽이 맡음
                 if (snap) {
-                    const moved = scrollSentenceToCenter(pairFirstEl, 'auto'); // 위치를 먼저 확정
+                    if (esc) escalatorTick(true); else scrollSentenceToCenter(pairFirstEl, 'instant'); // 위치를 먼저 확정
                     try { window.__hlAnims = hlAnimate(snap, pairNo); } catch (e) { window.__hlAnims = []; }
+                } else if (esc) {
+                    escalatorTick(true);
                 } else {
                     scrollSentenceToCenter(pairFirstEl);
                 }
+                if (esc) escalatorStart();
             } else if (pairFirstEl) { window.__lastPairNo = pairNo; }
             updateProgressUI();
             saveReadingProgress();
