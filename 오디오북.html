@@ -5721,6 +5721,16 @@ body.day-mode header.border-b {
             if (t && t.closest && t.closest('#sentence-list')) lastPointerMoveOverText = Date.now();
         }, { passive: true });
 
+        // 두 문장 짝 전체의 가운데 위치와, 첫 문장 높이(= '한 문장 위' 이동량)
+        function pairMetrics(el) {
+            const i = parseInt(String(el.id).replace('sentence-', ''), 10);
+            const first = isNaN(i) ? el : (document.getElementById(`sentence-${(i >> 1) * 2}`) || el);
+            const second = isNaN(i) ? null : document.getElementById(`sentence-${(i >> 1) * 2 + 1}`);
+            const r1 = first.getBoundingClientRect();
+            const bottom = second ? second.getBoundingClientRect().bottom : r1.bottom;
+            return { centerY: (r1.top + bottom) / 2, h1: r1.height };
+        }
+
         function scrollSentenceToCenter(el) {
             if (!el) return;
             const sinceMove = Date.now() - lastPointerMoveOverText;
@@ -5743,8 +5753,9 @@ body.day-mode header.border-b {
                 const containerRect = container.getBoundingClientRect();
                 const availableHeight = containerRect.height - titleBarHeight;
 
-                const elRect = el.getBoundingClientRect();
-                const elCenterY = elRect.top + elRect.height / 2;
+                const pm = pairMetrics(el);
+                const elRect = { height: pm.h1 };
+                const elCenterY = pm.centerY;
                 const desiredCenterY = containerRect.top + titleBarHeight + availableHeight / 2 - elRect.height; // 가운데보다 한 문장 위
                 const deltaY = elCenterY - desiredCenterY;
 
@@ -5759,8 +5770,9 @@ body.day-mode header.border-b {
             const topOffset = headerHeight + titleCardHeight;
             const availableHeight = window.innerHeight - topOffset;
 
-            const elRect = el.getBoundingClientRect();
-            const elCenterY = elRect.top + elRect.height / 2;
+            const pm = pairMetrics(el);
+            const elRect = { height: pm.h1 };
+            const elCenterY = pm.centerY;
             const desiredCenterY = topOffset + availableHeight / 2 - elRect.height; // 가운데보다 한 문장 위
             const deltaY = elCenterY - desiredCenterY;
 
@@ -5768,19 +5780,22 @@ body.day-mode header.border-b {
         }
 
         function highlightCurrentSentence() {
+            const pairNo = currentIndex >> 1; // 두 문장씩 짝(0-1, 2-3, …)으로 한꺼번에 바뀜
+            const pairFirstEl = document.getElementById(`sentence-${pairNo * 2}`);
             sentences.forEach((_, idx) => {
                 const el = document.getElementById(`sentence-${idx}`);
                 if (el) {
-                    if (idx === currentIndex) {
+                    if ((idx >> 1) === pairNo) {
                         el.className = "sentence-item p-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 text-amber-200 sentence-active flex items-center justify-between group shadow-sm";
-                        scrollSentenceToCenter(el);
                     } else {
                         el.className = "sentence-item p-3 rounded-2xl border border-transparent hover:bg-blue-600/40 hover:text-white text-stone-300 transition duration-150 flex items-center justify-between group";
                     }
                     const tsp = el.firstElementChild; // 읽는 문장 글자만 1.3배 (전체 화면은 CSS에서 처리)
-                    if (tsp && tsp.tagName === 'SPAN') tsp.style.fontSize = `${fontSizeScale * 1.125 * (idx === currentIndex ? 1.3 : 1)}rem`;
+                    if (tsp && tsp.tagName === 'SPAN') tsp.style.fontSize = `${fontSizeScale * 1.125 * ((idx >> 1) === pairNo ? 1.3 : 1)}rem`;
                 }
             });
+            // 화면 이동은 짝이 바뀔 때 한 번만 (같은 짝 안에서는 움직이지 않음)
+            if (pairFirstEl && window.__lastPairEl !== pairFirstEl) { window.__lastPairEl = pairFirstEl; scrollSentenceToCenter(pairFirstEl); }
             updateProgressUI();
             saveReadingProgress();
         }
