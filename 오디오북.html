@@ -5816,7 +5816,7 @@ body.day-mode header.border-b {
                                 if (!sp || sp.tagName !== 'SPAN') continue;
                                 const r = sp.getBoundingClientRect();
                                 const lines = escLineCount(sp), lh = r.height / lines;
-                                const y0 = bandY - lh, y2 = bandY + lh; // 두 줄 높이
+                                const y0 = bandY - lh, y2 = bandY + lh * 2; // 진한 파랑은 읽는 줄 + 바로 아랫줄, 두 줄 (위·아래로 반 줄씩 서서히)
                                 if (r.bottom < y0 - 2 || r.top > y2 + 2) continue;
                                 const base = getComputedStyle(sp).color;
                                 const q = (y) => `${(y - r.top).toFixed(1)}px`;
