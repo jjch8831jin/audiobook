@@ -88,10 +88,10 @@
         * { -webkit-tap-highlight-color: transparent; }
         .sentence-item { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; touch-action: manipulation; }
         .sentence-active { font-weight: 600; transform: translateX(4px); }
-        /* 지금 읽는 문장: 상자·배경 없이 글자만 1.3배로 키우고 빨간색으로 (믹서 가사창처럼) */
+        /* 지금 읽는 문장: 상자·배경 없이 글자만 1.3배로 키우고 파란색으로 (믹서 가사창처럼) */
         #sentence-list .sentence-item.sentence-active, body.day-mode #sentence-list .sentence-item.sentence-active { transform: none !important; background: transparent !important; background-color: transparent !important; border-color: transparent !important; box-shadow: none !important; }
-        #sentence-list .sentence-item.sentence-active > span { color: #ff4d4d !important; font-weight: 700 !important; transition: font-size 0.2s ease; }
-        body.day-mode #sentence-list .sentence-item.sentence-active > span { color: #c8102e !important; }
+        #sentence-list .sentence-item.sentence-active > span { color: #6ea8ff !important; font-weight: 700 !important; transition: font-size 0.2s ease; }
+        body.day-mode #sentence-list .sentence-item.sentence-active > span { color: #0b4fd6 !important; }
         #reader-container.reader-fullscreen-active #sentence-list .sentence-item.sentence-active > span { font-size: calc(var(--fullscreen-font-size, 18pt) * 1.3) !important; }
         @keyframes pulse-bar { 0%, 100% { height: 4px; } 50% { height: 16px; } }
         .v-bar { animation: pulse-bar 1.2s ease-in-out infinite; }
@@ -5744,7 +5744,7 @@ body.day-mode header.border-b {
 
                 const elRect = el.getBoundingClientRect();
                 const elCenterY = elRect.top + elRect.height / 2;
-                const desiredCenterY = containerRect.top + titleBarHeight + availableHeight / 2;
+                const desiredCenterY = containerRect.top + titleBarHeight + availableHeight / 2 - elRect.height; // 가운데보다 한 문장 위
                 const deltaY = elCenterY - desiredCenterY;
 
                 container.scrollBy({ top: deltaY, behavior: 'smooth' });
@@ -5760,7 +5760,7 @@ body.day-mode header.border-b {
 
             const elRect = el.getBoundingClientRect();
             const elCenterY = elRect.top + elRect.height / 2;
-            const desiredCenterY = topOffset + availableHeight / 2;
+            const desiredCenterY = topOffset + availableHeight / 2 - elRect.height; // 가운데보다 한 문장 위
             const deltaY = elCenterY - desiredCenterY;
 
             window.scrollBy({ top: deltaY, behavior: 'smooth' });
