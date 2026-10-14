@@ -90,7 +90,7 @@
         .sentence-active { font-weight: 600; transform: translateX(4px); }
         /* 지금 읽는 문장: 상자·배경 없이 글자만 1.3배로 키우고 파란색으로 (믹서 가사창처럼) */
         #sentence-list .sentence-item.sentence-active, body.day-mode #sentence-list .sentence-item.sentence-active { transform: none !important; background: transparent !important; background-color: transparent !important; border-color: transparent !important; box-shadow: none !important; }
-        #sentence-list .sentence-item > span { transition: font-size 0.45s ease, color 0.45s ease; } /* 모든 문장에 같은 전환 효과 → 커질 때와 작아질 때 똑같이 부드럽게 */
+        #sentence-list .sentence-item, #sentence-list .sentence-item > span { transition: none !important; } /* 글자 크기·색은 이전·다음 문장이 같은 순간에 한 번에 바뀜 (화면 이동만 부드럽게) */
         #sentence-list .sentence-item.sentence-active > span { color: #6ea8ff !important; font-weight: 700 !important; }
         body.day-mode #sentence-list .sentence-item.sentence-active > span { color: #0b4fd6 !important; }
         #reader-container.reader-fullscreen-active #sentence-list .sentence-item.sentence-active > span { font-size: calc(var(--fullscreen-font-size, 18pt) * 1.3) !important; }
@@ -5781,15 +5781,6 @@ body.day-mode header.border-b {
                     if (tsp && tsp.tagName === 'SPAN') tsp.style.fontSize = `${fontSizeScale * 1.125 * (idx === currentIndex ? 1.3 : 1)}rem`;
                 }
             });
-            // 글자 크기가 서서히 바뀌는 동안 계산한 위치는 조금 어긋나므로, 전환이 끝난 뒤 한 번 더 맞춘다
-            if (window.__lastHlIdx !== currentIndex) {
-                window.__lastHlIdx = currentIndex;
-                clearTimeout(window.__recenterTimer);
-                const hlIdx = currentIndex;
-                window.__recenterTimer = setTimeout(() => {
-                    if (hlIdx === currentIndex) scrollSentenceToCenter(document.getElementById(`sentence-${hlIdx}`));
-                }, 500);
-            }
             updateProgressUI();
             saveReadingProgress();
         }
