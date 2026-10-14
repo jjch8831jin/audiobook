@@ -5575,7 +5575,7 @@ body.day-mode header.border-b {
                 textSpan.style.fontSize = `${fontSizeScale * 1.125}rem`;
                 textSpan.className = "flex-1 cursor-pointer";
                 textSpan.innerText = sentence;
-                textSpan.onclick = () => jumpToSentence(idx);
+                textSpan.onclick = () => { if(abMarkClick(idx)) return; jumpToSentence(idx); };
 
                 // 읽다가 고칠 곳이 보이면, 마우스를 올렸을 때 나오는 ✎수정을 눌러 그 자리에서 바로 고친다.
                 // (찾기 창에서 검색하지 않아도 된다. 지금 읽는 문장에는 항상 보인다 — 아래 스타일 참고)
@@ -6141,6 +6141,107 @@ body.day-mode header.border-b {
             }
             return true;
         }
+
+        // ===== 읽는 화면에서 틀린 문장 고치기: 왼쪽 클릭으로 그 순간을 찍고, 오른쪽 클릭 메뉴에서 시간을 다시 나눈다 =====
+        // (오디오북 소리 + 문장별 시간 기록이 있을 때만 동작. 그 밖에는 예전 그대로: 왼쪽 클릭 = 그 문장으로 이동, 오른쪽 클릭 = 기본 메뉴)
+        let abMark = null, abPrev = null, abMenu = null, abNoClickUntil = 0;
+        (function(){ const st = document.createElement('style'); st.textContent = '.sentence-item.ab-mk{ outline:3px solid #f59e0b; outline-offset:-3px; }'; document.head.appendChild(st); })();
+        function abEditCtx() {
+            if (!isFullAudioMode) return null;
+            const ab = document.getElementById('local-audiobook-audio');
+            if (!ab || !isFinite(ab.duration) || !ab.duration) return null;
+            const od = ensureSentenceTimeOffsetsLoaded();
+            if (!od || !Array.isArray(od.offsets) || od.offsets.length === 0 || od.offsets.length !== (od.end - od.start) || od.end > sentences.length) return null;
+            return { ab, od };
+        }
+        function abPaintMark() {
+            document.querySelectorAll('.sentence-item.ab-mk').forEach(e => e.classList.remove('ab-mk'));
+            if (abMark) { const e = document.getElementById(`sentence-${abMark.idx}`); if (e) e.classList.add('ab-mk'); }
+        }
+        function abClearMark() { abMark = null; abPaintMark(); }
+        function abMarkClick(idx) { // true = 이 클릭을 '찍기'로 처리함
+            if (Date.now() < abNoClickUntil) return true;
+            const c = abEditCtx(); if (!c || idx < c.od.start || idx >= c.od.end) return false;
+            try { const sel = window.getSelection(); if (sel && String(sel).trim()) return true; } catch (e) {}
+            const playing = !c.ab.paused;
+            if (abMark && !playing) abMark.idx = idx; // 이미 멈춰서 찍어 둔 상태면 시간은 그대로, 줄만 바꿈
+            else { if (playing) c.ab.pause(); abMark = { idx, t: c.ab.currentTime, was: playing }; }
+            abPaintMark();
+            return true;
+        }
+        function abCloseMenu() { if (abMenu) { abMenu.remove(); abMenu = null; } }
+        function abDismiss() { if (!abMenu) return; abCloseMenu(); const c = abEditCtx(); if (abMark && abMark.was && c) { c.ab.play().catch(() => {}); } abClearMark(); abNoClickUntil = Date.now() + 400; }
+        function abSaveOffsets(od, offs) {
+            const rate = od.rate || currentRate || 1;
+            const rec = { start: od.start, end: od.end, offsets: offs.slice(), rate };
+            const ch = (typeof od.chapterIndex === 'number') ? od.chapterIndex : currentChapterIndex;
+            sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: ch, ...rec };
+            try {
+                localStorage.setItem(`ab_offsets::${currentBookId}::${ch}`, JSON.stringify(rec));
+                localStorage.setItem(`ab_offsets_edit::${currentBookId}::${ch}`, JSON.stringify({ ...rec, textHash: computeSentencesHash(), sentenceCount: sentences.length }));
+            } catch (e) { console.warn('시간 저장 실패', e); }
+        }
+        function abApply(mode, k, tNow) {
+            const c = abEditCtx(); if (!c) return false;
+            const { ab, od } = c; const rate = od.rate || currentRate || 1;
+            const T1 = tNow * rate, total = ab.duration * rate, i0 = k - od.start;
+            if (i0 < 0 || i0 >= od.offsets.length) return false;
+            if (i0 > 0 && T1 < od.offsets[i0 - 1]) { alert('이 문장의 시간이 바로 앞 문장보다 빠릅니다.\n앞 문장을 찍어서 다시 해 주세요.'); return false; }
+            if (mode === 'one' && i0 < od.offsets.length - 1 && T1 > od.offsets[i0 + 1]) { alert('이 문장의 시간이 바로 다음 문장보다 늦습니다.\n뒤 문장까지 함께 고치려면 "여기부터 다시 배분"을 쓰세요.'); return false; }
+            if (mode === 'from' && !(T1 < total - 1)) { alert('재생 위치가 끝에 너무 가깝습니다.'); return false; }
+            const offs = od.offsets.slice();
+            abPrev = { od: { ...od }, offsets: od.offsets.slice() };
+            if (mode === 'one') { offs[i0] = T1; }
+            else {
+                const w = []; for (let i = k; i < od.end; i++) { const n = cleanTextForTTS(sentences[i]).replace(/\s/g, '').length; w.push(n > 0 ? n : 2); }
+                const W = w.reduce((a, b) => a + b, 0); let acc = 0;
+                for (let i = k; i < od.end; i++) { offs[i - od.start] = T1 + (total - T1) * acc / W; acc += w[i - k]; }
+            }
+            abSaveOffsets(od, offs);
+            setStatus(mode === 'one' ? '이 문장 시간만 바꿨어요.' : '이 문장부터 끝까지 시간을 다시 나눴어요. 파일에 넣으려면 시간 맞추기의 저장을 누르세요.');
+            return true;
+        }
+        function abUndo() {
+            if (!abPrev) return false;
+            abSaveOffsets(abPrev.od, abPrev.offsets); abPrev = null;
+            setStatus('방금 고친 것을 되돌렸어요.');
+            return true;
+        }
+        function abOpenMenu(x, y, idx) {
+            abCloseMenu();
+            const c = abEditCtx(); if (!c) return;
+            let tNow, was;
+            if (abMark) { idx = abMark.idx; tNow = abMark.t; was = abMark.was; }
+            else { was = !c.ab.paused; if (was) c.ab.pause(); tNow = c.ab.currentTime; abMark = { idx, t: tNow, was }; abPaintMark(); }
+            const m = document.createElement('div'); abMenu = m;
+            m.style.cssText = 'position:fixed;z-index:99999;background:#fff;color:#1c1917;border:1px solid #a8a29e;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.35);padding:6px;display:flex;flex-direction:column;gap:2px;min-width:220px;';
+            const add = (label, fn) => {
+                const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+                b.style.cssText = 'text-align:left;padding:10px 14px;font-size:15pt;border-radius:8px;background:transparent;color:#1c1917;cursor:pointer;border:0;';
+                b.onmouseenter = () => { b.style.background = '#fef3c7'; }; b.onmouseleave = () => { b.style.background = 'transparent'; };
+                b.onclick = e => { e.stopPropagation(); abCloseMenu(); const ok = fn(); abClearMark(); abNoClickUntil = Date.now() + 400; if (ok !== false) { ab2Back(tNow); } else if (was) { c.ab.play().catch(() => {}); } };
+                m.appendChild(b);
+            };
+            add('⚖ 여기부터 다시 배분', () => abApply('from', idx, tNow));
+            add('⏱ 이 줄 시간만 바꾸기', () => abApply('one', idx, tNow));
+            if (abPrev) add('↶ 방금 고친 것 되돌리기', () => abUndo());
+            document.body.appendChild(m);
+            const w = m.offsetWidth, h = m.offsetHeight;
+            m.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 4)) + 'px'; m.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 4)) + 'px';
+        }
+        function ab2Back(tNow) { // 고친 뒤: 기준 위치의 5초 전부터 다시 재생
+            const c = abEditCtx(); const ab = c ? c.ab : document.getElementById('local-audiobook-audio'); if (!ab) return;
+            try { ab.currentTime = Math.max(0, tNow - 5); ab.play().catch(() => {}); } catch (e) {}
+        }
+        document.addEventListener('contextmenu', e => {
+            const row = e.target.closest ? e.target.closest('#sentence-list .sentence-item') : null; if (!row) return;
+            const c = abEditCtx(); if (!c) return;
+            const idx = Number(String(row.id).replace('sentence-', ''));
+            const k = abMark ? abMark.idx : idx; if (!(k >= c.od.start && k < c.od.end)) return;
+            e.preventDefault(); abOpenMenu(e.clientX, e.clientY, k);
+        });
+        document.addEventListener('pointerdown', e => { if (abMenu && !abMenu.contains(e.target)) abDismiss(); }, true);
+
 
         function jumpToSentence(idx) {
             if (idx >= 0 && idx < sentences.length) {
