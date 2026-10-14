@@ -6150,8 +6150,17 @@ body.day-mode header.border-b {
             if (!isFullAudioMode) return null;
             const ab = document.getElementById('local-audiobook-audio');
             if (!ab || !isFinite(ab.duration) || !ab.duration) return null;
-            const od = ensureSentenceTimeOffsetsLoaded();
-            if (!od || !Array.isArray(od.offsets) || od.offsets.length === 0 || od.offsets.length !== (od.end - od.start) || od.end > sentences.length) return null;
+            let od = ensureSentenceTimeOffsetsLoaded();
+            if (!od || !Array.isArray(od.offsets) || od.offsets.length === 0 || od.offsets.length !== (od.end - od.start) || od.end > sentences.length) {
+                // 시간표가 없는 소리: 글자 수 비율로 대략 나눈 시간표를 임시로 만들어 그 위에서 고친다 (고치면 그때부터 저장됨)
+                if (!sentences || sentences.length === 0) return null;
+                let st = 0, en = sentences.length;
+                try { const rg = getChapterRanges()[currentChapterIndex]; if (rg && rg.end > rg.start && rg.end <= sentences.length) { st = rg.start; en = rg.end; } } catch (e) {}
+                const w = []; for (let i = st; i < en; i++) { const n = cleanTextForTTS(sentences[i]).replace(/\s/g, '').length; w.push(n > 0 ? n : 2); }
+                const W = w.reduce((x, y) => x + y, 0), offsets = []; let acc = 0;
+                for (let i = 0; i < w.length; i++) { offsets.push(ab.duration * acc / W); acc += w[i]; }
+                od = { bookId: currentBookId, chapterIndex: currentChapterIndex, start: st, end: en, offsets, rate: 1, estimated: true };
+            }
             return { ab, od };
         }
         function abPaintMark() {
@@ -6203,7 +6212,11 @@ body.day-mode header.border-b {
         }
         function abUndo() {
             if (!abPrev) return false;
-            abSaveOffsets(abPrev.od, abPrev.offsets); abPrev = null;
+            if (abPrev.od.estimated) { // 시간표가 없던 소리의 첫 수정이면, 되돌리면 시간표 없는 상태로
+                const ch = (typeof abPrev.od.chapterIndex === 'number') ? abPrev.od.chapterIndex : currentChapterIndex;
+                try { localStorage.removeItem(`ab_offsets::${currentBookId}::${ch}`); localStorage.removeItem(`ab_offsets_edit::${currentBookId}::${ch}`); } catch (e) {}
+                sentenceTimeOffsets = null; abPrev = null;
+            } else { abSaveOffsets(abPrev.od, abPrev.offsets); abPrev = null; }
             setStatus('방금 고친 것을 되돌렸어요.');
             return true;
         }
