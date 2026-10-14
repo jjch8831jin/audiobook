@@ -5788,7 +5788,13 @@ body.day-mode header.border-b {
                 base = (header ? header.getBoundingClientRect().height : 0) + (tc ? tc.getBoundingClientRect().height : 0);
                 avail = window.innerHeight - base;
             }
-            const targetY = base + avail / 2 - e1.offsetHeight; // 가운데보다 한 문장 위
+            // 가운데보다 한 문장 위. 짝이 바뀌어 글이 1.3배로 커지면 이 높이도 달라지는데, 한꺼번에 반영하면 글이 한 번 튀므로 천천히 따라간다
+            const want = e1.offsetHeight, nowMs = performance.now();
+            let off = window.__escOff, lastMs = window.__escOffAt || nowMs;
+            if (off === undefined || Math.abs(want - off) > 90 || window.__escOffFor !== od) off = want;
+            else { const step = 0.06 * Math.max(0, nowMs - lastMs); off += Math.max(-step, Math.min(step, want - off)); }
+            window.__escOff = off; window.__escOffAt = nowMs; window.__escOffFor = od;
+            const targetY = base + avail / 2 - off;
             const delta = anchorY - targetY;
             if (Math.abs(delta) < 0.3) return true;
             const sc = scroller || window;
