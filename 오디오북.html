@@ -5713,6 +5713,13 @@ body.day-mode header.border-b {
             d.head.querySelectorAll('[data-rp]').forEach(n => n.remove());
             document.head.querySelectorAll('style, link[rel=stylesheet]').forEach(n => { const c = n.cloneNode(true); c.setAttribute('data-rp', '1'); d.head.appendChild(c); });
         }
+        // 버튼에 직접 적힌 onclick="..."은 처음 눌릴 때 '그때 그 창' 기준으로 한 번 만들어져 저장된다. 닫힌 창 기준으로 저장된 채 다시 쓰면 안 눌리므로, 창을 옮길 때마다 다시 만들게 한다.
+        function readerPopRehandle(roots) {
+            roots.forEach(r => { if (!r) return; [r].concat(Array.from(r.querySelectorAll('*'))).forEach(el => {
+                if (!el.attributes) return;
+                Array.from(el.attributes).forEach(a => { if (a.name.length > 2 && a.name.indexOf('on') === 0) { const v = a.value; el.removeAttribute(a.name); el.setAttribute(a.name, v); } });
+            }); });
+        }
         function readerPopOut() {
             if (readerPop && !readerPop.closed) { try { readerPop.focus(); } catch (e) {} return; }
             if (/Android|iPhone|iPad/i.test(navigator.userAgent) || (window.matchMedia && matchMedia('(pointer:coarse)').matches)) return; // 폰은 그대로 (이 창 전체화면)
@@ -5734,6 +5741,7 @@ body.day-mode header.border-b {
             d.body.style.cssText = 'margin:0;overflow:hidden;';
             readerPopHome = [el, fp, sl].filter(Boolean).map(n => { const ph = document.createComment('rp'); n.parentNode.insertBefore(ph, n); return [n, ph]; });
             readerPopHome.forEach(([n]) => d.body.appendChild(n));
+            readerPopRehandle(readerPopHome.map(x => x[0]));
             (window.__lisReg || []).forEach(x => { try { (x[0] === 'w' ? w : d).addEventListener(x[1], x[2], x[3]); } catch (e) {} });
             readerPopObs = new MutationObserver(() => { try { d.body.className = document.body.className; } catch (e) {} });
             readerPopObs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
@@ -5758,6 +5766,7 @@ body.day-mode header.border-b {
             const el = document.getElementById('reader-container');
             const st = el ? el.scrollTop : 0;
             readerPopHome.forEach(([n, ph]) => { try { ph.parentNode.insertBefore(n, ph); ph.remove(); } catch (e) {} });
+            readerPopRehandle(readerPopHome.map(x => x[0]));
             readerPopHome = [];
             if (isReaderFullscreen) toggleReaderFullscreenCore();
             try { window.__escRaf = 0; escalatorStart(); } catch (e) {}
