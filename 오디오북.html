@@ -6272,6 +6272,19 @@ body.day-mode header.border-b {
             const c = abEditCtx(); if (!c || idx < c.od.start || idx >= c.od.end) return false;
             try { const sel = rwin().getSelection(); if (sel && String(sel).trim()) return true; } catch (e) {}
             const playing = !c.ab.paused;
+            if (!(abMark && !playing)) {
+                // 지금 재생 위치가 그 문장 자리(앞 문장 시간 ~ 다음 문장 시간)를 벗어났으면(한참 지나갔거나 아직 안 왔으면) 찍지 않고,
+                // 그 문장의 시간 5초 전으로 돌아가서 다시 들려 준다 — 늦게 눌러도 버튼이 먹통이 되지 않게
+                try {
+                    const rate = c.od.rate || currentRate || 1, T1 = c.ab.currentTime * rate, i0 = idx - c.od.start, offs = c.od.offsets;
+                    const prevOff = i0 > 0 ? offs[i0 - 1] : 0, nextOff = i0 < offs.length - 1 ? offs[i0 + 1] : c.ab.duration * rate;
+                    if (T1 < prevOff || T1 > nextOff) {
+                        abClearMark();
+                        c.ab.currentTime = Math.max(0, offs[i0] / rate - 5); c.ab.play().catch(() => {});
+                        return true;
+                    }
+                } catch (e) {}
+            }
             if (abMark && !playing) abMark.idx = idx; // 이미 멈춰서 찍어 둔 상태면 시간은 그대로, 줄만 바꿈
             else { if (playing) c.ab.pause(); abMark = { idx, t: c.ab.currentTime, was: playing }; }
             abPaintMark();
