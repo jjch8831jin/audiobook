@@ -68,6 +68,27 @@
         }
     </style>
     <script>
+    // 본문 전체화면을 별도 창(보조 모니터)으로 뺄 때, 문서·창에 걸어 둔 단축키/스크롤 감시를 그 창에도 똑같이 걸기 위해 기록해 둔다.
+    (function(){
+        const reg = window.__lisReg = [];
+        const SKIP_W = /^(load|DOMContentLoaded|pagehide|pageshow|beforeunload|unload|visibilitychange|focus|blur|storage|message|online|offline|hashchange|popstate|error|unhandledrejection|beforeinstallprompt|appinstalled|fullscreenchange|readystatechange)$/;
+        [[window,'w'],[document,'d']].forEach(([T,k]) => {
+            const oa = T.addEventListener, orm = T.removeEventListener;
+            T.addEventListener = function(t, f, c){ if(this === T && !SKIP_W.test(t) && typeof f === 'function') reg.push([k, t, f, c]); return oa.call(this, t, f, c); };
+            T.removeEventListener = function(t, f, c){
+                if(this === T){ const i = reg.findIndex(x => x[0] === k && x[1] === t && x[2] === f); if(i >= 0) reg.splice(i, 1); const pw = window.__readerPop; if(pw && !pw.closed){ try{ (k === 'w' ? pw : pw.document).removeEventListener(t, f, c); }catch(e){} } }
+                return orm.call(this, t, f, c);
+            };
+        });
+        const gid = document.getElementById.bind(document), qs = document.querySelector.bind(document), qsa = document.querySelectorAll.bind(document);
+        const pd = () => { const w = window.__readerPop; try{ return (w && !w.closed) ? w.document : null; }catch(e){ return null; } };
+        document.getElementById = id => gid(id) || (pd() ? pd().getElementById(id) : null);
+        document.querySelector = q => qs(q) || (pd() ? pd().querySelector(q) : null);
+        document.querySelectorAll = q => { const a = qsa(q); const d = pd(); if(!d) return a; const b = d.querySelectorAll(q); return b.length ? Array.from(a).concat(Array.from(b)) : a; };
+        ['alert','confirm','prompt'].forEach(n => { const o = window[n].bind(window); window[n] = function(){ const w = window.__readerPop; try{ if(w && !w.closed) return w[n].apply(w, arguments); }catch(e){} return o.apply(null, arguments); }; });
+    })();
+    </script>
+    <script>
         tailwind.config = {
             theme: {
                 extend: {
@@ -2575,12 +2596,12 @@ body.day-mode header.border-b {
             try { fsOpen = !!isReaderFullscreen; } catch (e) {}
             let r;
             if (fsOpen) {
-                const w = Math.min(window.innerWidth - 16, 760);
-                r = { bottom: 56, left: Math.max(8, (window.innerWidth - w) / 2), width: w };
+                const w = Math.min(rwin().innerWidth - 16, 760);
+                r = { bottom: 56, left: Math.max(8, (rwin().innerWidth - w) / 2), width: w };
             } else {
                 const card = document.getElementById('reader-title-card');
                 r = card ? card.getBoundingClientRect() : null;
-                if (!r || r.width < 50) r = { bottom: 56, left: 8, width: window.innerWidth - 16 };
+                if (!r || r.width < 50) r = { bottom: 56, left: 8, width: rwin().innerWidth - 16 };
             }
             const top = Math.max(8, r.bottom + 6);
             panel.style.position = 'fixed';
@@ -2589,7 +2610,7 @@ body.day-mode header.border-b {
             panel.style.width = r.width + 'px';
             panel.style.zIndex = fsOpen ? '205' : '60';
             panel.style.boxSizing = 'border-box';
-            panel.style.maxHeight = Math.max(160, window.innerHeight - top - 12) + 'px';
+            panel.style.maxHeight = Math.max(160, rwin().innerHeight - top - 12) + 'px';
             panel.style.overflowY = 'auto';
         }
         window.addEventListener('scroll', positionFindPanel, { passive: true });
@@ -5212,7 +5233,7 @@ body.day-mode header.border-b {
                 el = document.createElement('div');
                 el.id = 'copy-notice';
                 el.style.cssText = 'position:fixed; left:50%; top:16px; transform:translateX(-50%); z-index:9999; max-width:90vw; padding:10px 16px; border-radius:12px; font-size:15px; font-weight:700; box-shadow:0 6px 20px rgba(0,0,0,.5); pointer-events:none;';
-                document.body.appendChild(el);
+                rdoc().body.appendChild(el);
             }
             el.textContent = msg;
             el.style.background = ok ? '#065f46' : '#9f1239';
@@ -5626,7 +5647,7 @@ body.day-mode header.border-b {
         }
 
         function promptFullscreenFontSize() {
-            const input = prompt("글자 크기를 숫자로 입력하세요 (12~60pt):", String(fullscreenFontSizePt));
+            const input = rwin().prompt("글자 크기를 숫자로 입력하세요 (12~60pt):", String(fullscreenFontSizePt));
             if (input === null) return;
             const n = parseInt(input, 10);
             if (isNaN(n)) {
@@ -5681,7 +5702,75 @@ body.day-mode header.border-b {
         window.addEventListener('scroll', updateReaderTitleCardPosition, { passive: true });
         window.addEventListener('resize', updateReaderTitleCardPosition);
 
+
+        // ===== 본문 전체화면을 별도 창으로 (보조 모니터로 끌어다 놓고 쓰는 용) — 믹서의 시간 맞추기 창과 같은 방식 =====
+        let readerPop = null, readerPopHome = [], readerPopObs = null;
+        function rwin() { try { return (readerPop && !readerPop.closed) ? readerPop : window; } catch (e) { return window; } }
+        function rdoc() { return rwin().document; }
+        function readerPopSyncStyles() {
+            const w = readerPop; if (!w || w.closed) return;
+            const d = w.document;
+            d.head.querySelectorAll('[data-rp]').forEach(n => n.remove());
+            document.head.querySelectorAll('style, link[rel=stylesheet]').forEach(n => { const c = n.cloneNode(true); c.setAttribute('data-rp', '1'); d.head.appendChild(c); });
+        }
+        function readerPopOut() {
+            if (readerPop && !readerPop.closed) { try { readerPop.focus(); } catch (e) {} return; }
+            if (/Android|iPhone|iPad/i.test(navigator.userAgent) || (window.matchMedia && matchMedia('(pointer:coarse)').matches)) return; // 폰은 그대로 (이 창 전체화면)
+            let P = {}; try { P = JSON.parse(localStorage.getItem('abReaderWin') || '{}') || {}; } catch (e) {}
+            const f = 'popup=yes,width=' + (P.w || 1100) + ',height=' + (P.h || 800) + ',left=' + (P.l != null ? P.l : 60) + ',top=' + (P.t != null ? P.t : 40);
+            let w = null; try { w = window.open('', 'abReader', f); } catch (e) { w = null; }
+            if (!w) return; // 팝업이 막혀 있으면 지금처럼 이 창에서
+            const el = document.getElementById('reader-container');
+            const fp = document.getElementById('find-panel'), sl = document.getElementById('reader-scroll-slider');
+            const st = el.scrollTop;
+            const d = w.document;
+            d.title = (document.getElementById('current-book-title') || {}).textContent || '본문 전체화면';
+            if (!d.getElementById('rpInit')) { const mk = d.createElement('meta'); mk.id = 'rpInit'; mk.name = 'viewport'; mk.content = 'width=device-width,initial-scale=1'; d.head.appendChild(mk); }
+            readerPop = w; window.__readerPop = w;
+            // 버튼에 직접 적힌 onclick="함수()"는 새 창 안에서 실행되므로, 이 창의 함수들을 새 창에서도 부를 수 있게 이어 준다
+            Object.keys(window).forEach(k => { try { const v = window[k]; if (typeof v === 'function' && !(k in w)) w[k] = function () { return v.apply(window, arguments); }; } catch (e) {} });
+            readerPopSyncStyles();
+            d.body.className = document.body.className;
+            d.body.style.cssText = 'margin:0;overflow:hidden;';
+            readerPopHome = [el, fp, sl].filter(Boolean).map(n => { const ph = document.createComment('rp'); n.parentNode.insertBefore(ph, n); return [n, ph]; });
+            readerPopHome.forEach(([n]) => d.body.appendChild(n));
+            (window.__lisReg || []).forEach(x => { try { (x[0] === 'w' ? w : d).addEventListener(x[1], x[2], x[3]); } catch (e) {} });
+            readerPopObs = new MutationObserver(() => { try { d.body.className = document.body.className; } catch (e) {} });
+            readerPopObs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+            let styT = 0;
+            const headObs = new MutationObserver(() => { clearTimeout(styT); styT = setTimeout(readerPopSyncStyles, 300); });
+            headObs.observe(document.head, { childList: true, subtree: true, characterData: true });
+            w.__headObs = headObs;
+            w.addEventListener('pagehide', () => { if (readerPop === w) readerPopIn(); });
+            w.addEventListener('resize', () => { try { positionFindPanel(); } catch (e) {} });
+            el.scrollTop = st;
+            try { window.__escRaf = 0; escalatorStart(); } catch (e) {}
+            try { bandUpdate(); } catch (e) {}
+            try { w.focus(); } catch (e) {}
+        }
+        function readerPopIn() { // 별도 창이 닫히면 본문을 원래 자리로 돌리고 전체화면도 끝낸다
+            const w = readerPop; if (!w) return;
+            readerPop = null; window.__readerPop = null;
+            try { localStorage.setItem('abReaderWin', JSON.stringify({ l: w.screenX, t: w.screenY, w: w.outerWidth, h: w.outerHeight })); } catch (e) {}
+            try { if (w.__headObs) w.__headObs.disconnect(); } catch (e) {}
+            try { if (readerPopObs) readerPopObs.disconnect(); } catch (e) {}
+            (window.__lisReg || []).forEach(x => { try { (x[0] === 'w' ? w : w.document).removeEventListener(x[1], x[2], x[3]); } catch (e) {} });
+            const el = document.getElementById('reader-container');
+            const st = el ? el.scrollTop : 0;
+            readerPopHome.forEach(([n, ph]) => { try { ph.parentNode.insertBefore(n, ph); ph.remove(); } catch (e) {} });
+            readerPopHome = [];
+            if (isReaderFullscreen) toggleReaderFullscreenCore();
+            try { window.__escRaf = 0; escalatorStart(); } catch (e) {}
+            try { bandUpdate(); } catch (e) {}
+        }
+        window.addEventListener('pagehide', () => { try { if (readerPop) { const w = readerPop; readerPop = null; window.__readerPop = null; w.close(); } } catch (e) {} });
+
         function toggleReaderFullscreen() {
+            if (isReaderFullscreen && readerPop && !readerPop.closed) { readerPop.close(); return; } // 별도 창이면 창을 닫는 것이 곧 전체화면 닫기
+            toggleReaderFullscreenCore();
+            if (isReaderFullscreen) readerPopOut(); // 열렸으면 별도 창(보조 모니터용)으로
+        }
+        function toggleReaderFullscreenCore() {
             const el = document.getElementById('reader-container');
             const btn = document.getElementById('btn-reader-fullscreen');
             if (!el) return;
@@ -5765,7 +5854,7 @@ body.day-mode header.border-b {
             } else {
                 const header = document.querySelector('header'), tc = document.getElementById('reader-title-card');
                 base = (header ? header.getBoundingClientRect().height : 0) + (tc ? tc.getBoundingClientRect().height : 0);
-                avail = window.innerHeight - base;
+                avail = rwin().innerHeight - base;
             }
             return { scroller, base, avail };
         }
@@ -5828,7 +5917,7 @@ body.day-mode header.border-b {
                     }
                 }
             } catch (e) { /* 색 입히기는 보조 기능이라 실패해도 읽기에는 지장 없음 */ }
-            prev.forEach(el => { if (!next.includes(el) && document.body.contains(el)) bandClear(el); });
+            prev.forEach(el => { if (!next.includes(el) && el.isConnected) bandClear(el); });
             window.__bandEls = next;
         }
         window.addEventListener('scroll', () => bandUpdate(), { passive: true, capture: true });
@@ -5891,7 +5980,7 @@ body.day-mode header.border-b {
             } else {
                 const header = document.querySelector('header'), tc = document.getElementById('reader-title-card');
                 base = (header ? header.getBoundingClientRect().height : 0) + (tc ? tc.getBoundingClientRect().height : 0);
-                avail = window.innerHeight - base;
+                avail = rwin().innerHeight - base;
             }
             // 가운데보다 한 줄 위. 문장마다 줄 수가 달라도 기준선이 흔들리지 않도록, 읽는 문장이 한 줄일 때의 높이를 항상 같게 쓴다
             const off = eh - (lines1 - 1) * lh1;
@@ -5907,8 +5996,8 @@ body.day-mode header.border-b {
             }
             return true;
         }
-        function escalatorLoop() { window.__escRaf = 0; const go = escalatorTick(false); bandUpdate(); if (go) window.__escRaf = requestAnimationFrame(escalatorLoop); }
-        function escalatorStart() { if (!window.__escRaf) window.__escRaf = requestAnimationFrame(escalatorLoop); }
+        function escalatorLoop() { window.__escRaf = 0; const go = escalatorTick(false); bandUpdate(); if (go) window.__escRaf = rwin().requestAnimationFrame(escalatorLoop); }
+        function escalatorStart() { if (!window.__escRaf) window.__escRaf = rwin().requestAnimationFrame(escalatorLoop); }
         ['wheel', 'touchstart', 'touchmove', 'mousedown', 'keydown'].forEach(ev => window.addEventListener(ev, () => { window.__escUserUntil = Date.now() + 2500; }, { passive: true, capture: true }));
         (function () {
             const attach = () => { const ab = document.getElementById('local-audiobook-audio'); if (ab) { ab.addEventListener('play', escalatorStart); ab.addEventListener('playing', escalatorStart); ['pause', 'ended', 'seeked', 'emptied'].forEach(ev => ab.addEventListener(ev, () => setTimeout(bandUpdate, 0))); } };
@@ -5953,7 +6042,7 @@ body.day-mode header.border-b {
             const headerHeight = header ? header.getBoundingClientRect().height : 0;
             const titleCardHeight = titleCard ? titleCard.getBoundingClientRect().height : 0;
             const topOffset = headerHeight + titleCardHeight;
-            const availableHeight = window.innerHeight - topOffset;
+            const availableHeight = rwin().innerHeight - topOffset;
 
             const pm = pairMetrics(el);
             const elRect = { height: pm.h1 };
@@ -5974,7 +6063,7 @@ body.day-mode header.border-b {
                 const el = document.getElementById(`sentence-${i}`);
                 if (!el) continue;
                 const top = el.getBoundingClientRect().top;
-                if (top < -2 * window.innerHeight || top > 3 * window.innerHeight) continue;
+                if (top < -2 * rwin().innerHeight || top > 3 * rwin().innerHeight) continue;
                 const sp = el.firstElementChild;
                 const cs = sp ? getComputedStyle(sp) : null;
                 items.push({ i, el, top, sp, px: cs ? parseFloat(cs.fontSize) : 0, color: cs ? cs.color : '' });
@@ -5985,7 +6074,7 @@ body.day-mode header.border-b {
             const out = [];
             let maxDy = 0;
             items.forEach(it => { it.dy = it.top - it.el.getBoundingClientRect().top; maxDy = Math.max(maxDy, Math.abs(it.dy)); });
-            if (maxDy > window.innerHeight * 1.5) return out; // 멀리 건너뛴 경우는 움직임 없이 바로
+            if (maxDy > rwin().innerHeight * 1.5) return out; // 멀리 건너뛴 경우는 움직임 없이 바로
             const opt = { duration: HL_MS, easing: 'ease-in-out' };
             items.forEach(it => {
                 if (Math.abs(it.dy) > 0.5) out.push(it.el.animate([{ transform: `translateY(${it.dy}px)` }, { transform: 'translateY(0)' }], opt));
@@ -6007,7 +6096,7 @@ body.day-mode header.border-b {
             const pairNo = currentIndex >> 1; // 두 문장씩 짝(0-1, 2-3, …): 짝의 두 문장을 다 읽고 나면 다음 짝으로 한꺼번에 바뀜
             const pairFirstEl = document.getElementById(`sentence-${pairNo * 2}`);
             const changed = !!pairFirstEl && window.__lastPairEl !== pairFirstEl;
-            const canAnim = changed && window.__lastPairEl && document.body.contains(window.__lastPairEl) && typeof Element.prototype.animate === 'function';
+            const canAnim = changed && window.__lastPairEl && window.__lastPairEl.isConnected && typeof Element.prototype.animate === 'function';
             (window.__hlAnims || []).forEach(a => { try { a.cancel(); } catch (e) {} });
             window.__hlAnims = [];
             let snap = null;
@@ -6171,7 +6260,7 @@ body.day-mode header.border-b {
         function abMarkClick(idx) { // true = 이 클릭을 '찍기'로 처리함
             if (Date.now() < abNoClickUntil) return true;
             const c = abEditCtx(); if (!c || idx < c.od.start || idx >= c.od.end) return false;
-            try { const sel = window.getSelection(); if (sel && String(sel).trim()) return true; } catch (e) {}
+            try { const sel = rwin().getSelection(); if (sel && String(sel).trim()) return true; } catch (e) {}
             const playing = !c.ab.paused;
             if (abMark && !playing) abMark.idx = idx; // 이미 멈춰서 찍어 둔 상태면 시간은 그대로, 줄만 바꿈
             else { if (playing) c.ab.pause(); abMark = { idx, t: c.ab.currentTime, was: playing }; }
@@ -6238,9 +6327,9 @@ body.day-mode header.border-b {
             add('⚖ 여기부터 다시 배분', () => abApply('from', idx, tNow));
             add('⏱ 이 줄 시간만 바꾸기', () => abApply('one', idx, tNow));
             if (abPrev) add('↶ 방금 고친 것 되돌리기', () => abUndo());
-            document.body.appendChild(m);
+            rdoc().body.appendChild(m);
             const w = m.offsetWidth, h = m.offsetHeight;
-            m.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 4)) + 'px'; m.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 4)) + 'px';
+            m.style.left = Math.max(4, Math.min(x, rwin().innerWidth - w - 4)) + 'px'; m.style.top = Math.max(4, Math.min(y, rwin().innerHeight - h - 4)) + 'px';
         }
         function ab2Back(tNow) { // 고친 뒤: 기준 위치의 5초 전부터 다시 재생
             const c = abEditCtx(); const ab = c ? c.ab : document.getElementById('local-audiobook-audio'); if (!ab) return;
@@ -9112,8 +9201,9 @@ body.day-mode header.border-b {
         }
 
         document.addEventListener('keydown', (e) => {
-            const tag = (document.activeElement && document.activeElement.tagName) || '';
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable)) return;
+            const ae = (e.target && e.target.ownerDocument ? e.target.ownerDocument.activeElement : document.activeElement);
+            const tag = (ae && ae.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || (ae && ae.isContentEditable)) return;
             // 모달(팝업 창)이 열려있을 때는 단축키가 그 안의 조작과 헷갈리지 않도록 끈다.
             const anyModalOpen = document.querySelector('.fixed.inset-0:not(.hidden)');
             if (anyModalOpen) return;
@@ -9393,9 +9483,9 @@ body.day-mode header.border-b {
       const header = document.querySelector('header');
       const headerBottom = header ? header.getBoundingClientRect().bottom : 0;
       const topLimit = fs ? 72 : Math.max(r.top + 12, headerBottom + 8);
-      const bottomLimit = Math.min(r.bottom - 12, window.innerHeight - 8);
+      const bottomLimit = Math.min(r.bottom - 12, rwin().innerHeight - 8);
       const h = bottomLimit - topLimit;
-      if (m.max <= 4 || h < THUMB_H + 20 || r.bottom < 40 || r.top > window.innerHeight - 40) {
+      if (m.max <= 4 || h < THUMB_H + 20 || r.bottom < 40 || r.top > rwin().innerHeight - 40) {
         wrap.style.display = 'none';
         return;
       }
@@ -9409,12 +9499,12 @@ body.day-mode header.border-b {
       const gap = aside ? aside.getBoundingClientRect().left - r.right : 0;
       if (fs) {
         // 전체화면: 주황 막대가 창 오른쪽 경계선에 딱 닿게 (막대 오른쪽 끝 = 창 오른쪽 끝)
-        wrap.style.left = (window.innerWidth - 16) + 'px';
+        wrap.style.left = (rwin().innerWidth - 16) + 'px';
       } else if (gap >= 20) {
         wrap.style.left = (r.right + (gap - 18) / 2) + 'px';
       } else {
         const sbw = Math.max(0, c.offsetWidth - c.clientWidth);
-        wrap.style.left = (Math.min(r.right, window.innerWidth) - sbw - 6 - 18) + 'px';
+        wrap.style.left = (Math.min(r.right, rwin().innerWidth) - sbw - 6 - 18) + 'px';
       }
       if (!dragging) {
         const ratio = Math.min(1, Math.max(0, m.top / m.max));
@@ -9465,7 +9555,7 @@ body.day-mode header.border-b {
 
     // 본문이 스크롤되거나 화면 크기·내용이 바뀌면 손잡이 위치를 다시 맞춘다.
     let raf = 0;
-    function schedule() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; layout(); }); }
+    function schedule() { if (raf) return; raf = rwin().requestAnimationFrame(() => { raf = 0; layout(); }); }
     window.addEventListener('scroll', schedule, true);   // 본문 박스 안의 스크롤도 잡도록 capture
     window.addEventListener('resize', schedule);
     document.addEventListener('DOMContentLoaded', () => {
