@@ -5824,6 +5824,7 @@ body.day-mode header.border-b {
         // ===== 에스컬레이터 스크롤: 소리 재생 시간에 맞춰 읽는 위치(두 문장 짝 안의 어디쯤인지)를 따라 글이 쉬지 않고 천천히 올라간다 =====
         // 문장별 시작 시간이 있는 오디오북 소리를 재생 중일 때만 동작하고, 그 외(일시정지·시간 정보 없음·브라우저 읽기)는 예전처럼 짝이 바뀔 때 한 번 이동한다.
         function escalatorOffsets() {
+            return null; // 읽는 동안 글이 계속 올라가지 않게 끔: 파란 두 줄을 다 읽은 뒤에만 다음 짝으로 이동
             if (!isFullAudioMode) return null;
             const ab = document.getElementById('local-audiobook-audio');
             if (!ab || ab.paused || ab.ended || !isFinite(ab.duration) || !ab.duration) return null;
