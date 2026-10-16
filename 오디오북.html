@@ -6014,6 +6014,14 @@ body.day-mode header.border-b {
             if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach); else attach();
         })();
 
+        function oneLineH(el) { // 읽는 문장 글자 한 줄의 높이 (글자 크기가 바뀌면 같이 바뀜)
+            try {
+                const sp = el && el.firstElementChild; if (!sp) return 0;
+                const cs = getComputedStyle(sp); let lh = parseFloat(cs.lineHeight);
+                if (!(lh > 0)) lh = (parseFloat(cs.fontSize) || 0) * 1.7;
+                return lh > 0 ? lh : 0;
+            } catch (e) { return 0; }
+        }
         function scrollSentenceToCenter(el, behavior) {
             if (!el) return false;
             behavior = behavior || 'smooth';
@@ -6040,7 +6048,7 @@ body.day-mode header.border-b {
                 const pm = pairMetrics(el);
                 const elRect = { height: pm.h1 };
                 const elCenterY = pm.top; // 읽는 문장의 첫 줄을 항상 같은 높이(화면 위에서 약 35%)에 둔다 — 문장이 길어도 첫 줄이 안 잘림
-                const desiredCenterY = containerRect.top + titleBarHeight + availableHeight * 0.35;
+                const desiredCenterY = containerRect.top + titleBarHeight + availableHeight * 0.35 - oneLineH(el); // 기준점: 글자 한 줄만큼 위
                 const deltaY = elCenterY - desiredCenterY;
 
                 container.scrollBy({ top: deltaY, behavior: behavior });
@@ -6057,7 +6065,7 @@ body.day-mode header.border-b {
             const pm = pairMetrics(el);
             const elRect = { height: pm.h1 };
             const elCenterY = pm.top; // 읽는 문장의 첫 줄을 항상 같은 높이(화면 위에서 약 35%)에 둔다
-            const desiredCenterY = topOffset + availableHeight * 0.35;
+            const desiredCenterY = topOffset + availableHeight * 0.35 - oneLineH(el);
             const deltaY = elCenterY - desiredCenterY;
 
             window.scrollBy({ top: deltaY, behavior: behavior });
