@@ -5827,7 +5827,7 @@ body.day-mode header.border-b {
             const second = null;
             const r1 = first.getBoundingClientRect();
             const bottom = second ? second.getBoundingClientRect().bottom : r1.bottom;
-            return { centerY: (r1.top + bottom) / 2, h1: r1.height };
+            return { centerY: (r1.top + bottom) / 2, h1: r1.height, top: r1.top };
         }
 
         // ===== 에스컬레이터 스크롤: 소리 재생 시간에 맞춰 읽는 위치(두 문장 짝 안의 어디쯤인지)를 따라 글이 쉬지 않고 천천히 올라간다 =====
@@ -6039,8 +6039,8 @@ body.day-mode header.border-b {
 
                 const pm = pairMetrics(el);
                 const elRect = { height: pm.h1 };
-                const elCenterY = pm.centerY;
-                const desiredCenterY = containerRect.top + titleBarHeight + availableHeight / 2 - elRect.height; // 가운데보다 한 문장 위
+                const elCenterY = pm.top; // 읽는 문장의 첫 줄을 항상 같은 높이(화면 위에서 약 35%)에 둔다 — 문장이 길어도 첫 줄이 안 잘림
+                const desiredCenterY = containerRect.top + titleBarHeight + availableHeight * 0.35;
                 const deltaY = elCenterY - desiredCenterY;
 
                 container.scrollBy({ top: deltaY, behavior: behavior });
@@ -6056,8 +6056,8 @@ body.day-mode header.border-b {
 
             const pm = pairMetrics(el);
             const elRect = { height: pm.h1 };
-            const elCenterY = pm.centerY;
-            const desiredCenterY = topOffset + availableHeight / 2 - elRect.height; // 가운데보다 한 문장 위
+            const elCenterY = pm.top; // 읽는 문장의 첫 줄을 항상 같은 높이(화면 위에서 약 35%)에 둔다
+            const desiredCenterY = topOffset + availableHeight * 0.35;
             const deltaY = elCenterY - desiredCenterY;
 
             window.scrollBy({ top: deltaY, behavior: behavior });
@@ -6274,13 +6274,13 @@ body.day-mode header.border-b {
             const playing = !c.ab.paused;
             if (!(abMark && !playing)) {
                 // 지금 재생 위치가 그 문장 자리(앞 문장 시간 ~ 다음 문장 시간)를 벗어났으면(한참 지나갔거나 아직 안 왔으면) 찍지 않고,
-                // 그 문장의 시간 5초 전으로 돌아가서 다시 들려 준다 — 늦게 눌러도 버튼이 먹통이 되지 않게
+                // 그 문장의 시간 5초 전으로 돌아가서 멈춘다 — 늦게 눌러도 버튼이 먹통이 되지 않게
                 try {
                     const rate = c.od.rate || currentRate || 1, T1 = c.ab.currentTime * rate, i0 = idx - c.od.start, offs = c.od.offsets;
                     const prevOff = i0 > 0 ? offs[i0 - 1] : 0, nextOff = i0 < offs.length - 1 ? offs[i0 + 1] : c.ab.duration * rate;
                     if (T1 < prevOff || T1 > nextOff) {
                         abClearMark();
-                        c.ab.currentTime = Math.max(0, offs[i0] / rate - 5); c.ab.play().catch(() => {});
+                        c.ab.pause(); c.ab.currentTime = Math.max(0, offs[i0] / rate - 5); // 돌아간 자리에서 멈춘다
                         return true;
                     }
                 } catch (e) {}
