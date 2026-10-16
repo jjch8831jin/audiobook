@@ -6331,7 +6331,7 @@ body.day-mode header.border-b {
                 const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
                 b.style.cssText = 'text-align:left;padding:10px 14px;font-size:15pt;border-radius:8px;background:transparent;color:#1c1917;cursor:pointer;border:0;';
                 b.onmouseenter = () => { b.style.background = '#fef3c7'; }; b.onmouseleave = () => { b.style.background = 'transparent'; };
-                b.onclick = e => { e.stopPropagation(); abCloseMenu(); const ok = fn(); abClearMark(); abNoClickUntil = Date.now() + 400; if (ok !== false) { ab2Back(tNow); } else if (was) { c.ab.play().catch(() => {}); } };
+                b.onclick = e => { e.stopPropagation(); abCloseMenu(); const ok = fn(); abClearMark(); abNoClickUntil = Date.now() + 400; ab2Back(tNow); }; // 성공하든 안내창이 뜨든, 항상 찍은 시간의 5초 전으로 돌아가 다시 재생
                 m.appendChild(b);
             };
             add('⚖ 여기부터 다시 배분', () => abApply('from', idx, tNow));
