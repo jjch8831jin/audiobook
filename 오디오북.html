@@ -37,9 +37,8 @@
             margin: 0 !important;
             padding-top: 0 !important; /* 위쪽 여백을 없애서 제목 줄이 창 맨 위에 완전히 밀착되게 함 */
         }
-        /* 전체화면에서는 뒤의 메뉴·패널이 비쳐 보이지 않게 배경을 불투명하게 (밤: 어두운 톤, 낮: 낮 모드 색) */
-        #reader-container.reader-fullscreen-active { background-color: #1c1917 !important; }
-        body.day-mode #reader-container.reader-fullscreen-active { background-color: #fdfaf1 !important; }
+        /* 폰(터치 화면)의 야간모드 전체화면: 뒤의 메뉴·패널이 비쳐 보이지 않게 배경을 불투명하게 */
+        @media (pointer: coarse) { body:not(.day-mode) #reader-container.reader-fullscreen-active { background-color: #1c1917 !important; } }
         /* 전체화면일 때는 멀리서도 보기 편하도록 글자를 더 크게 (기본 18pt, 버튼으로 조절 가능) */
         #reader-container.reader-fullscreen-active #sentence-list .sentence-item > span {
             font-size: var(--fullscreen-font-size, 18pt) !important;
@@ -71,6 +70,27 @@
         }
     </style>
     <script>
+    // 본문 전체화면을 별도 창(보조 모니터)으로 뺄 때, 문서·창에 걸어 둔 단축키/스크롤 감시를 그 창에도 똑같이 걸기 위해 기록해 둔다.
+    (function(){
+        const reg = window.__lisReg = [];
+        const SKIP_W = /^(load|DOMContentLoaded|pagehide|pageshow|beforeunload|unload|visibilitychange|focus|blur|storage|message|online|offline|hashchange|popstate|error|unhandledrejection|beforeinstallprompt|appinstalled|fullscreenchange|readystatechange)$/;
+        [[window,'w'],[document,'d']].forEach(([T,k]) => {
+            const oa = T.addEventListener, orm = T.removeEventListener;
+            T.addEventListener = function(t, f, c){ if(this === T && !SKIP_W.test(t) && typeof f === 'function') reg.push([k, t, f, c]); return oa.call(this, t, f, c); };
+            T.removeEventListener = function(t, f, c){
+                if(this === T){ const i = reg.findIndex(x => x[0] === k && x[1] === t && x[2] === f); if(i >= 0) reg.splice(i, 1); const pw = window.__readerPop; if(pw && !pw.closed){ try{ (k === 'w' ? pw : pw.document).removeEventListener(t, f, c); }catch(e){} } }
+                return orm.call(this, t, f, c);
+            };
+        });
+        const gid = document.getElementById.bind(document), qs = document.querySelector.bind(document), qsa = document.querySelectorAll.bind(document);
+        const pd = () => { const w = window.__readerPop; try{ return (w && !w.closed) ? w.document : null; }catch(e){ return null; } };
+        document.getElementById = id => gid(id) || (pd() ? pd().getElementById(id) : null);
+        document.querySelector = q => qs(q) || (pd() ? pd().querySelector(q) : null);
+        document.querySelectorAll = q => { const a = qsa(q); const d = pd(); if(!d) return a; const b = d.querySelectorAll(q); return b.length ? Array.from(a).concat(Array.from(b)) : a; };
+        ['alert','confirm','prompt'].forEach(n => { const o = window[n].bind(window); window[n] = function(){ const w = window.__readerPop; try{ if(w && !w.closed) return w[n].apply(w, arguments); }catch(e){} return o.apply(null, arguments); }; });
+    })();
+    </script>
+    <script>
         tailwind.config = {
             theme: {
                 extend: {
@@ -90,7 +110,14 @@
         ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.5); }
         * { -webkit-tap-highlight-color: transparent; }
         .sentence-item { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; touch-action: manipulation; }
-        .sentence-active { font-weight: 600; transform: translateX(4px); }
+        .sentence-active { font-weight: 600; }
+        /* 지금 읽는 문장: 상자·배경 없이 글자만 1.3배로 키우고 파란색으로 (믹서 가사창처럼) */
+        #sentence-list .sentence-item.sentence-active, body.day-mode #sentence-list .sentence-item.sentence-active { background: transparent !important; background-color: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+        #sentence-list .sentence-item, #sentence-list .sentence-item > span { transition: none !important; } /* 글자 크기·색은 이전·다음 문장이 같은 순간에 한 번에 바뀜 (화면 이동만 부드럽게) */
+        @property --hlc { syntax: '<color>'; inherits: false; initial-value: #0b4fd6; }
+        #sentence-list .sentence-item.sentence-active > span, #sentence-list .sentence-item.sentence-next > span { font-weight: 700 !important; } /* 파란색은 '읽는 띠'(두 줄)에만 입힌다 */
+        body.day-mode #sentence-list .sentence-item.sentence-active > span { --hlc: #0b4fd6; }
+        #reader-container.reader-fullscreen-active #sentence-list .sentence-item.sentence-active > span, #reader-container.reader-fullscreen-active #sentence-list .sentence-item.sentence-next > span { font-size: calc(var(--fullscreen-font-size, 18pt) * 1.3) !important; }
         @keyframes pulse-bar { 0%, 100% { height: 4px; } 50% { height: 16px; } }
         .v-bar { animation: pulse-bar 1.2s ease-in-out infinite; }
         .v-bar:nth-child(2) { animation-delay: 0.2s; }
@@ -2571,12 +2598,12 @@ body.day-mode header.border-b {
             try { fsOpen = !!isReaderFullscreen; } catch (e) {}
             let r;
             if (fsOpen) {
-                const w = Math.min(window.innerWidth - 16, 760);
-                r = { bottom: 56, left: Math.max(8, (window.innerWidth - w) / 2), width: w };
+                const w = Math.min(rwin().innerWidth - 16, 760);
+                r = { bottom: 56, left: Math.max(8, (rwin().innerWidth - w) / 2), width: w };
             } else {
                 const card = document.getElementById('reader-title-card');
                 r = card ? card.getBoundingClientRect() : null;
-                if (!r || r.width < 50) r = { bottom: 56, left: 8, width: window.innerWidth - 16 };
+                if (!r || r.width < 50) r = { bottom: 56, left: 8, width: rwin().innerWidth - 16 };
             }
             const top = Math.max(8, r.bottom + 6);
             panel.style.position = 'fixed';
@@ -2585,7 +2612,7 @@ body.day-mode header.border-b {
             panel.style.width = r.width + 'px';
             panel.style.zIndex = fsOpen ? '205' : '60';
             panel.style.boxSizing = 'border-box';
-            panel.style.maxHeight = Math.max(160, window.innerHeight - top - 12) + 'px';
+            panel.style.maxHeight = Math.max(160, rwin().innerHeight - top - 12) + 'px';
             panel.style.overflowY = 'auto';
         }
         window.addEventListener('scroll', positionFindPanel, { passive: true });
@@ -5208,7 +5235,7 @@ body.day-mode header.border-b {
                 el = document.createElement('div');
                 el.id = 'copy-notice';
                 el.style.cssText = 'position:fixed; left:50%; top:16px; transform:translateX(-50%); z-index:9999; max-width:90vw; padding:10px 16px; border-radius:12px; font-size:15px; font-weight:700; box-shadow:0 6px 20px rgba(0,0,0,.5); pointer-events:none;';
-                document.body.appendChild(el);
+                rdoc().body.appendChild(el);
             }
             el.textContent = msg;
             el.style.background = ok ? '#065f46' : '#9f1239';
@@ -5571,7 +5598,7 @@ body.day-mode header.border-b {
                 textSpan.style.fontSize = `${fontSizeScale * 1.125}rem`;
                 textSpan.className = "flex-1 cursor-pointer";
                 textSpan.innerText = sentence;
-                textSpan.onclick = () => jumpToSentence(idx);
+                textSpan.onclick = () => { if(abMarkClick(idx)) return; jumpToSentence(idx); };
 
                 // 읽다가 고칠 곳이 보이면, 마우스를 올렸을 때 나오는 ✎수정을 눌러 그 자리에서 바로 고친다.
                 // (찾기 창에서 검색하지 않아도 된다. 지금 읽는 문장에는 항상 보인다 — 아래 스타일 참고)
@@ -5622,7 +5649,7 @@ body.day-mode header.border-b {
         }
 
         function promptFullscreenFontSize() {
-            const input = prompt("글자 크기를 숫자로 입력하세요 (12~60pt):", String(fullscreenFontSizePt));
+            const input = rwin().prompt("글자 크기를 숫자로 입력하세요 (12~60pt):", String(fullscreenFontSizePt));
             if (input === null) return;
             const n = parseInt(input, 10);
             if (isNaN(n)) {
@@ -5677,7 +5704,84 @@ body.day-mode header.border-b {
         window.addEventListener('scroll', updateReaderTitleCardPosition, { passive: true });
         window.addEventListener('resize', updateReaderTitleCardPosition);
 
+
+        // ===== 본문 전체화면을 별도 창으로 (보조 모니터로 끌어다 놓고 쓰는 용) — 믹서의 시간 맞추기 창과 같은 방식 =====
+        let readerPop = null, readerPopHome = [], readerPopObs = null;
+        function rwin() { try { return (readerPop && !readerPop.closed) ? readerPop : window; } catch (e) { return window; } }
+        function rdoc() { return rwin().document; }
+        function readerPopSyncStyles() {
+            const w = readerPop; if (!w || w.closed) return;
+            const d = w.document;
+            d.head.querySelectorAll('[data-rp]').forEach(n => n.remove());
+            document.head.querySelectorAll('style, link[rel=stylesheet]').forEach(n => { const c = n.cloneNode(true); c.setAttribute('data-rp', '1'); d.head.appendChild(c); });
+        }
+        // 버튼에 직접 적힌 onclick="..."은 처음 눌릴 때 '그때 그 창' 기준으로 한 번 만들어져 저장된다. 닫힌 창 기준으로 저장된 채 다시 쓰면 안 눌리므로, 창을 옮길 때마다 다시 만들게 한다.
+        function readerPopRehandle(roots) {
+            roots.forEach(r => { if (!r) return; [r].concat(Array.from(r.querySelectorAll('*'))).forEach(el => {
+                if (!el.attributes) return;
+                Array.from(el.attributes).forEach(a => { if (a.name.length > 2 && a.name.indexOf('on') === 0) { const v = a.value; el.removeAttribute(a.name); el.setAttribute(a.name, v); } });
+            }); });
+        }
+        function readerPopOut() {
+            if (readerPop && !readerPop.closed) { try { readerPop.focus(); } catch (e) {} return; }
+            if (/Android|iPhone|iPad/i.test(navigator.userAgent) || (window.matchMedia && matchMedia('(pointer:coarse)').matches)) return; // 폰은 그대로 (이 창 전체화면)
+            let P = {}; try { P = JSON.parse(localStorage.getItem('abReaderWin') || '{}') || {}; } catch (e) {}
+            const f = 'popup=yes,width=' + (P.w || 1100) + ',height=' + (P.h || 800) + ',left=' + (P.l != null ? P.l : 60) + ',top=' + (P.t != null ? P.t : 40);
+            let w = null; try { w = window.open('', 'abReader', f); } catch (e) { w = null; }
+            if (!w) return; // 팝업이 막혀 있으면 지금처럼 이 창에서
+            const el = document.getElementById('reader-container');
+            const fp = document.getElementById('find-panel'), sl = document.getElementById('reader-scroll-slider');
+            const st = el.scrollTop;
+            const d = w.document;
+            d.title = (document.getElementById('current-book-title') || {}).textContent || '본문 전체화면';
+            if (!d.getElementById('rpInit')) { const mk = d.createElement('meta'); mk.id = 'rpInit'; mk.name = 'viewport'; mk.content = 'width=device-width,initial-scale=1'; d.head.appendChild(mk); }
+            readerPop = w; window.__readerPop = w;
+            // 버튼에 직접 적힌 onclick="함수()"는 새 창 안에서 실행되므로, 이 창의 함수들을 새 창에서도 부를 수 있게 이어 준다
+            Object.keys(window).forEach(k => { try { const v = window[k]; if (typeof v === 'function' && !(k in w)) w[k] = function () { return v.apply(window, arguments); }; } catch (e) {} });
+            readerPopSyncStyles();
+            d.body.className = document.body.className;
+            d.body.style.cssText = 'margin:0;overflow:hidden;';
+            readerPopHome = [el, fp, sl].filter(Boolean).map(n => { const ph = document.createComment('rp'); n.parentNode.insertBefore(ph, n); return [n, ph]; });
+            readerPopHome.forEach(([n]) => d.body.appendChild(n));
+            readerPopRehandle(readerPopHome.map(x => x[0]));
+            (window.__lisReg || []).forEach(x => { try { (x[0] === 'w' ? w : d).addEventListener(x[1], x[2], x[3]); } catch (e) {} });
+            readerPopObs = new MutationObserver(() => { try { d.body.className = document.body.className; } catch (e) {} });
+            readerPopObs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+            let styT = 0;
+            const headObs = new MutationObserver(() => { clearTimeout(styT); styT = setTimeout(readerPopSyncStyles, 300); });
+            headObs.observe(document.head, { childList: true, subtree: true, characterData: true });
+            w.__headObs = headObs;
+            w.addEventListener('pagehide', () => { if (readerPop === w) readerPopIn(); });
+            w.addEventListener('resize', () => { try { positionFindPanel(); } catch (e) {} });
+            el.scrollTop = st;
+            try { window.__escRaf = 0; escalatorStart(); } catch (e) {}
+            try { bandUpdate(); } catch (e) {}
+            try { w.focus(); } catch (e) {}
+        }
+        function readerPopIn() { // 별도 창이 닫히면 본문을 원래 자리로 돌리고 전체화면도 끝낸다
+            const w = readerPop; if (!w) return;
+            readerPop = null; window.__readerPop = null;
+            try { localStorage.setItem('abReaderWin', JSON.stringify({ l: w.screenX, t: w.screenY, w: w.outerWidth, h: w.outerHeight })); } catch (e) {}
+            try { if (w.__headObs) w.__headObs.disconnect(); } catch (e) {}
+            try { if (readerPopObs) readerPopObs.disconnect(); } catch (e) {}
+            (window.__lisReg || []).forEach(x => { try { (x[0] === 'w' ? w : w.document).removeEventListener(x[1], x[2], x[3]); } catch (e) {} });
+            const el = document.getElementById('reader-container');
+            const st = el ? el.scrollTop : 0;
+            readerPopHome.forEach(([n, ph]) => { try { ph.parentNode.insertBefore(n, ph); ph.remove(); } catch (e) {} });
+            readerPopRehandle(readerPopHome.map(x => x[0]));
+            readerPopHome = [];
+            if (isReaderFullscreen) toggleReaderFullscreenCore();
+            try { window.__escRaf = 0; escalatorStart(); } catch (e) {}
+            try { bandUpdate(); } catch (e) {}
+        }
+        window.addEventListener('pagehide', () => { try { if (readerPop) { const w = readerPop; readerPop = null; window.__readerPop = null; w.close(); } } catch (e) {} });
+
         function toggleReaderFullscreen() {
+            if (isReaderFullscreen && readerPop && !readerPop.closed) { readerPop.close(); return; } // 별도 창이면 창을 닫는 것이 곧 전체화면 닫기
+            toggleReaderFullscreenCore();
+            if (isReaderFullscreen) readerPopOut(); // 열렸으면 별도 창(보조 모니터용)으로
+        }
+        function toggleReaderFullscreenCore() {
             const el = document.getElementById('reader-container');
             const btn = document.getElementById('btn-reader-fullscreen');
             if (!el) return;
@@ -5718,15 +5822,218 @@ body.day-mode header.border-b {
             if (t && t.closest && t.closest('#sentence-list')) lastPointerMoveOverText = Date.now();
         }, { passive: true });
 
-        function scrollSentenceToCenter(el) {
-            if (!el) return;
+        // 두 문장 짝 전체의 가운데 위치와, 첫 문장 높이(= '한 문장 위' 이동량)
+        function pairMetrics(el) {
+            const i = parseInt(String(el.id).replace('sentence-', ''), 10);
+            const first = el;
+            const second = null;
+            const r1 = first.getBoundingClientRect();
+            const bottom = second ? second.getBoundingClientRect().bottom : r1.bottom;
+            return { centerY: (r1.top + bottom) / 2, h1: r1.height, top: r1.top };
+        }
+
+        // ===== 에스컬레이터 스크롤: 소리 재생 시간에 맞춰 읽는 위치(두 문장 짝 안의 어디쯤인지)를 따라 글이 쉬지 않고 천천히 올라간다 =====
+        // 문장별 시작 시간이 있는 오디오북 소리를 재생 중일 때만 동작하고, 그 외(일시정지·시간 정보 없음·브라우저 읽기)는 예전처럼 짝이 바뀔 때 한 번 이동한다.
+        function escalatorOffsets() {
+            return null; // 읽는 동안 글이 계속 올라가지 않게 끔: 파란 두 줄을 다 읽은 뒤에만 다음 짝으로 이동
+            if (!isFullAudioMode) return null;
+            const ab = document.getElementById('local-audiobook-audio');
+            if (!ab || ab.paused || ab.ended || !isFinite(ab.duration) || !ab.duration) return null;
+            const od = ensureSentenceTimeOffsetsLoaded();
+            if (!od || !Array.isArray(od.offsets) || od.offsets.length === 0 || od.offsets.length !== (od.end - od.start) || od.end > sentences.length) return null;
+            return { ab, od };
+        }
+        function escLayoutTop(el, list) { // 움직이는 효과(transform)와 상관없는 실제 배치 위치
+            const lr = list.getBoundingClientRect();
+            return lr.top + (el.offsetParent === list ? el.offsetTop : el.offsetTop - list.offsetTop);
+        }
+        function escLineCount(sp) { // 글이 화면에서 몇 줄로 나뉘어 있는지
+            try {
+                if (!sp || !sp.firstChild) return 1;
+                const rg = document.createRange(); rg.selectNodeContents(sp);
+                return Math.max(1, new Set(Array.from(rg.getClientRects()).map(r => Math.round(r.top / 4))).size);
+            } catch (e) { return 1; }
+        }
+        function escViewGeom() { // 글이 보이는 영역(읽는 화면)의 위쪽 끝과 높이
+            let scroller = null, base, avail;
+            if (isReaderFullscreen) {
+                scroller = document.getElementById('reader-container');
+                if (!scroller) return null;
+                const tb = document.getElementById('reader-fullscreen-title-bar');
+                const tbh = tb ? tb.getBoundingClientRect().height : 0;
+                const cr = scroller.getBoundingClientRect();
+                base = cr.top + tbh; avail = cr.height - tbh;
+            } else {
+                const header = document.querySelector('header'), tc = document.getElementById('reader-title-card');
+                base = (header ? header.getBoundingClientRect().height : 0) + (tc ? tc.getBoundingClientRect().height : 0);
+                avail = rwin().innerHeight - base;
+            }
+            return { scroller, base, avail };
+        }
+        function escOneLineOff(e1) { // 문장마다 줄 수가 달라도 기준선이 흔들리지 않도록, 문장이 한 줄일 때의 높이를 쓴다
+            let off = e1.offsetHeight;
+            try {
+                const sp = e1.firstElementChild;
+                if (sp && sp.firstChild) {
+                    const rg = document.createRange(); rg.selectNodeContents(sp);
+                    const tops = new Set(Array.from(rg.getClientRects()).map(r => Math.round(r.top / 4)));
+                    const lines = Math.max(1, tops.size);
+                    off = e1.offsetHeight - (lines - 1) * (sp.offsetHeight / lines);
+                }
+            } catch (e) { off = e1.offsetHeight; }
+            return off;
+        }
+
+        // ===== 읽는 띠: 화면의 읽는 자리(두 줄 높이)에서 줄마다 글자색이 위치에 따라 변한다 =====
+        // 아래에서 올라오면서 서서히 파랑으로 물들고, 가운데 한 줄이 가장 진하며, 위로 나가면서 서서히 원래 색으로 돌아간다.
+        // 소리가 문장별 시간 정보로 재생 중이 아닐 때(일시정지·브라우저 읽기)는 읽는 문장 전체를 파랗게 보여 준다.
+        function bandBlue() { return document.body.classList.contains('day-mode') ? '#0b4fd6' : '#6ea8ff'; }
+        function bandClear(el) {
+            const sp = el && el.firstElementChild;
+            if (!sp) return;
+            sp.style.removeProperty('background'); sp.style.removeProperty('-webkit-background-clip'); sp.style.removeProperty('background-clip');
+            sp.style.removeProperty('-webkit-text-fill-color');
+        }
+        function bandUpdate() {
+            const list = document.getElementById('sentence-list');
+            const prev = window.__bandEls || [];
+            const next = [];
+            try {
+                if (list && list.offsetParent !== null && sentences.length) {
+                    const blue = bandBlue();
+                    const cur = document.getElementById(`sentence-${currentIndex}`); // 한 문장씩 색이 바뀜
+                    const nxEl = null;
+                    const spC = cur && cur.firstElementChild, spN = nxEl && nxEl.firstElementChild;
+                    if (spC && spC.tagName === 'SPAN') {
+                        const playing = !!escalatorOffsets();
+                        const rc = spC.getBoundingClientRect(), rn = spN ? spN.getBoundingClientRect() : rc;
+                        const lh = rc.height / escLineCount(spC);
+                        const yTop = rc.top, yBot = Math.max(rc.bottom, rn.bottom); // 읽는 문장 맨 위 ~ 다음 문장 맨 아래: 두 문장
+                        [cur, nxEl].forEach((el, k) => {
+                            const sp = el && el.firstElementChild;
+                            if (!sp || sp.tagName !== 'SPAN') return;
+                            if (playing) {
+                                // 소리 재생 중: 두 문장 전체를 파랑으로, 위·아래 끝은 반 줄씩 서서히 (아래에서 올라오며 물들고 위로 나가며 빠짐)
+                                const r = sp.getBoundingClientRect();
+                                const base = getComputedStyle(sp).color;
+                                const q = (y) => `${(y - r.top).toFixed(1)}px`;
+                                sp.style.setProperty('background', `linear-gradient(to bottom, ${base} 0, ${base} ${q(yTop - lh * 0.5)}, ${blue} ${q(yTop)}, ${blue} ${q(yBot)}, ${base} ${q(yBot + lh * 0.5)}, ${base} 100%)`);
+                                sp.style.setProperty('-webkit-background-clip', 'text'); sp.style.setProperty('background-clip', 'text');
+                                sp.style.setProperty('-webkit-text-fill-color', 'transparent');
+                            } else { // 일시정지·브라우저 읽기: 두 문장 전체를 파랗게
+                                sp.style.removeProperty('background'); sp.style.removeProperty('-webkit-background-clip'); sp.style.removeProperty('background-clip');
+                                sp.style.setProperty('-webkit-text-fill-color', blue);
+                            }
+                            next.push(el);
+                        });
+                    }
+                }
+            } catch (e) { /* 색 입히기는 보조 기능이라 실패해도 읽기에는 지장 없음 */ }
+            prev.forEach(el => { if (!next.includes(el) && el.isConnected) bandClear(el); });
+            window.__bandEls = next;
+        }
+        window.addEventListener('scroll', () => bandUpdate(), { passive: true, capture: true });
+        window.addEventListener('resize', () => bandUpdate());
+
+        function escLineCount(sp) {
+            try {
+                if (!sp || !sp.firstChild) return 1;
+                const rg = document.createRange(); rg.selectNodeContents(sp);
+                return Math.max(1, new Set(Array.from(rg.getClientRects()).map(r => Math.round(r.top / 4))).size);
+            } catch (e) { return 1; }
+        }
+        function escalatorTick(force) {
+            const eo = escalatorOffsets();
+            if (!eo) return false;
+            const now = Date.now();
+            if (!force && (now < jumpLockUntil || now < (window.__escUserUntil || 0) || now < (window.__escSkipUntil || 0) || now - lastPointerMoveOverText < 1200)) return true;
+            const { ab, od } = eo;
+            const list = document.getElementById('sentence-list');
+            if (!list) return true;
+            const rate = od.rate || currentRate || 1;
+            const t = ab.currentTime * rate; // 속도 1.0x 기준 시간
+            const offs = od.offsets;
+            let k = 0, lo = 0, hi = offs.length - 1;
+            while (lo <= hi) { const mid = (lo + hi) >> 1; if (offs[mid] <= t) { k = mid; lo = mid + 1; } else hi = mid - 1; }
+            // 문장 표시(짝)와 위치 계산이 같은 순간에 맞물리도록, 지금 시간에 해당하는 문장이 바뀌었으면 여기서 바로 표시를 바꾼다
+            if (!force) {
+                let ci = od.start + k; if (ci >= sentences.length) ci = sentences.length - 1;
+                if (ci !== currentIndex) { currentIndex = ci; highlightCurrentSentence(); return true; }
+            }
+            const total = ab.duration * rate;
+            const T = (j) => (j < od.start ? offs[0] : (j >= od.end ? Math.max(total, offs[offs.length - 1] + 1) : offs[j - od.start]));
+            const pf = od.start + k;
+            const e1 = document.getElementById(`sentence-${pf}`);
+            if (!e1) return true;
+            const t0 = T(pf), t1 = T(pf + 1), D = Math.max(0.05, t1 - t0);
+            const nx = document.getElementById(`sentence-${pf + 1}`);
+            // 소리로 읽고 있는 '줄'의 가운데가 읽는 선에 오도록 한다: 문장 안에서는 첫 줄 가운데 → 마지막 줄 가운데로 천천히,
+            // 문장과 문장 사이(앞뒤 반쯤씩)에서는 마지막 줄 → 다음 문장 첫 줄로 끊김 없이 이어서 올라간다
+            const top1 = escLayoutTop(e1, list), eh = e1.offsetHeight;
+            const sp1 = e1.firstElementChild;
+            const lines1 = escLineCount(sp1), lh1 = sp1 ? sp1.offsetHeight / lines1 : eh;
+            const c = sp1 ? Math.max(0, (eh - sp1.offsetHeight) / 2 + lh1 / 2) : eh / 2;
+            const nxTop = nx ? escLayoutTop(nx, list) : top1 + eh;
+            const gap = Math.max(0, nxTop - (top1 + eh));
+            const h = Math.min(0.5, 0.35 * D), u = t - t0;
+            const first = top1 + c, last = Math.max(first, top1 + eh - c);
+            let anchorY;
+            if (u < h) { const a = Math.min(1, Math.max(0, (u + h) / (2 * h))); const prevLast = top1 - gap - c; anchorY = prevLast + a * (first - prevLast); }
+            else if (t < t1 - h) { const a = (u - h) / Math.max(0.001, D - 2 * h); anchorY = first + Math.min(1, Math.max(0, a)) * (last - first); }
+            else { const b = Math.min(1, Math.max(0, (t - (t1 - h)) / (2 * h))); anchorY = last + b * ((nxTop + c) - last); }
+            let scroller = null, base, avail;
+            if (isReaderFullscreen) {
+                scroller = document.getElementById('reader-container');
+                if (!scroller) return true;
+                const tb = document.getElementById('reader-fullscreen-title-bar');
+                const tbh = tb ? tb.getBoundingClientRect().height : 0;
+                const cr = scroller.getBoundingClientRect();
+                base = cr.top + tbh; avail = cr.height - tbh;
+            } else {
+                const header = document.querySelector('header'), tc = document.getElementById('reader-title-card');
+                base = (header ? header.getBoundingClientRect().height : 0) + (tc ? tc.getBoundingClientRect().height : 0);
+                avail = rwin().innerHeight - base;
+            }
+            // 가운데보다 한 줄 위. 문장마다 줄 수가 달라도 기준선이 흔들리지 않도록, 읽는 문장이 한 줄일 때의 높이를 항상 같게 쓴다
+            const off = eh - (lines1 - 1) * lh1;
+            const targetY = base + avail / 2 - off;
+            const delta = anchorY - targetY;
+            if (Math.abs(delta) < 0.3) return true;
+            const sc = scroller || window;
+            if (!force && Math.abs(delta) > 200) { // 많이 벗어났으면(스크롤을 만졌거나 이동 직후) 한 번 부드럽게 따라붙는다
+                sc.scrollBy({ top: delta, behavior: 'smooth' });
+                window.__escSkipUntil = now + 700;
+            } else {
+                sc.scrollBy({ top: delta, behavior: 'instant' });
+            }
+            return true;
+        }
+        function escalatorLoop() { window.__escRaf = 0; const go = escalatorTick(false); bandUpdate(); if (go) window.__escRaf = rwin().requestAnimationFrame(escalatorLoop); }
+        function escalatorStart() { if (!window.__escRaf) window.__escRaf = rwin().requestAnimationFrame(escalatorLoop); }
+        ['wheel', 'touchstart', 'touchmove', 'mousedown', 'keydown'].forEach(ev => window.addEventListener(ev, () => { window.__escUserUntil = Date.now() + 2500; }, { passive: true, capture: true }));
+        (function () {
+            const attach = () => { const ab = document.getElementById('local-audiobook-audio'); if (ab) { ab.addEventListener('play', escalatorStart); ab.addEventListener('playing', escalatorStart); ['pause', 'ended', 'seeked', 'emptied'].forEach(ev => ab.addEventListener(ev, () => setTimeout(bandUpdate, 0))); } };
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach); else attach();
+        })();
+
+        function oneLineH(el) { // 읽는 문장 글자 한 줄의 높이 (글자 크기가 바뀌면 같이 바뀜)
+            try {
+                const sp = el && el.firstElementChild; if (!sp) return 0;
+                const cs = getComputedStyle(sp); let lh = parseFloat(cs.lineHeight);
+                if (!(lh > 0)) lh = (parseFloat(cs.fontSize) || 0) * 1.7;
+                return lh > 0 ? lh : 0;
+            } catch (e) { return 0; }
+        }
+        function scrollSentenceToCenter(el, behavior) {
+            if (!el) return false;
+            behavior = behavior || 'smooth';
             const sinceMove = Date.now() - lastPointerMoveOverText;
             if (sinceMove < 1200) {
                 clearTimeout(scrollDeferTimer);
                 scrollDeferTimer = setTimeout(() => {
                     scrollSentenceToCenter(document.getElementById(`sentence-${currentIndex}`));
                 }, 1200 - sinceMove + 50);
-                return;
+                return false;
             }
 
             // 전체화면 팝업 안에서는 "페이지 전체"가 아니라, 그 박스(reader-container) 자신의
@@ -5735,18 +6042,19 @@ body.day-mode header.border-b {
             if (isReaderFullscreen) {
                 const container = document.getElementById('reader-container');
                 const titleBar = document.getElementById('reader-fullscreen-title-bar');
-                if (!container) return;
+                if (!container) return false;
                 const titleBarHeight = titleBar ? titleBar.getBoundingClientRect().height : 0;
                 const containerRect = container.getBoundingClientRect();
                 const availableHeight = containerRect.height - titleBarHeight;
 
-                const elRect = el.getBoundingClientRect();
-                const elCenterY = elRect.top + elRect.height / 2;
-                const desiredCenterY = containerRect.top + titleBarHeight + availableHeight / 2;
+                const pm = pairMetrics(el);
+                const elRect = { height: pm.h1 };
+                const elCenterY = pm.top; // 읽는 문장의 첫 줄을 항상 같은 높이(화면 위에서 약 35%)에 둔다 — 문장이 길어도 첫 줄이 안 잘림
+                const desiredCenterY = containerRect.top + titleBarHeight + availableHeight * 0.35 - oneLineH(el); // 기준점: 글자 한 줄만큼 위
                 const deltaY = elCenterY - desiredCenterY;
 
-                container.scrollBy({ top: deltaY, behavior: 'smooth' });
-                return;
+                container.scrollBy({ top: deltaY, behavior: behavior });
+                return true;
             }
 
             const header = document.querySelector('header');
@@ -5754,28 +6062,94 @@ body.day-mode header.border-b {
             const headerHeight = header ? header.getBoundingClientRect().height : 0;
             const titleCardHeight = titleCard ? titleCard.getBoundingClientRect().height : 0;
             const topOffset = headerHeight + titleCardHeight;
-            const availableHeight = window.innerHeight - topOffset;
+            const availableHeight = rwin().innerHeight - topOffset;
 
-            const elRect = el.getBoundingClientRect();
-            const elCenterY = elRect.top + elRect.height / 2;
-            const desiredCenterY = topOffset + availableHeight / 2;
+            const pm = pairMetrics(el);
+            const elRect = { height: pm.h1 };
+            const elCenterY = pm.top; // 읽는 문장의 첫 줄을 항상 같은 높이(화면 위에서 약 35%)에 둔다
+            const desiredCenterY = topOffset + availableHeight * 0.35 - oneLineH(el);
             const deltaY = elCenterY - desiredCenterY;
 
-            window.scrollBy({ top: deltaY, behavior: 'smooth' });
+            window.scrollBy({ top: deltaY, behavior: behavior });
+            return true;
+        }
+
+        // 두 문장 짝이 바뀔 때: 최종 위치를 먼저 확정한 뒤, 보이는 모습(위치·글자 크기·색)만 함께 서서히 옮긴다 (앞·뒤 글이 같이 움직임)
+        const HL_MS = 700;
+        function hlSnap(oldNo, newNo) {
+            const lo = Math.max(0, Math.min(oldNo, newNo) - 8), hi = Math.min(sentences.length - 1, Math.max(oldNo, newNo) + 11);
+            const items = [];
+            for (let i = lo; i <= hi; i++) {
+                const el = document.getElementById(`sentence-${i}`);
+                if (!el) continue;
+                const top = el.getBoundingClientRect().top;
+                if (top < -2 * rwin().innerHeight || top > 3 * rwin().innerHeight) continue;
+                const sp = el.firstElementChild;
+                const cs = sp ? getComputedStyle(sp) : null;
+                items.push({ i, el, top, sp, px: cs ? parseFloat(cs.fontSize) : 0, color: cs ? cs.color : '' });
+            }
+            return items;
+        }
+        function hlAnimate(items, newNo) {
+            const out = [];
+            let maxDy = 0;
+            items.forEach(it => { it.dy = it.top - it.el.getBoundingClientRect().top; maxDy = Math.max(maxDy, Math.abs(it.dy)); });
+            if (maxDy > rwin().innerHeight * 1.5) return out; // 멀리 건너뛴 경우는 움직임 없이 바로
+            const opt = { duration: HL_MS, easing: 'ease-in-out' };
+            items.forEach(it => {
+                if (Math.abs(it.dy) > 0.5) out.push(it.el.animate([{ transform: `translateY(${it.dy}px)` }, { transform: 'translateY(0)' }], opt));
+                const sp = it.sp;
+                if (!sp || !it.px) return;
+                const cs = getComputedStyle(sp), np = parseFloat(cs.fontSize);
+                if (np && Math.abs(np - it.px) > 0.1) out.push(sp.animate([{ transform: `scale(${it.px / np})`, transformOrigin: 'left center' }, { transform: 'scale(1)', transformOrigin: 'left center' }], opt));
+                if (it.i === newNo) {
+                    const fin = cs.getPropertyValue('--hlc').trim();
+                    if (fin && it.color) { try { out.push(sp.animate([{ '--hlc': it.color }, { '--hlc': fin }], opt)); } catch (e) {} }
+                } else if (it.color && it.color !== cs.color) {
+                    out.push(sp.animate([{ color: it.color }, { color: cs.color }], opt));
+                }
+            });
+            return out;
         }
 
         function highlightCurrentSentence() {
+            const pairNo = currentIndex; // 한 문장씩: 지금 읽는 문장 하나만 파랗고, 다 읽으면 다음 문장으로 바뀌며 한 문장씩 이동
+            const pairFirstEl = document.getElementById(`sentence-${pairNo}`);
+            const changed = !!pairFirstEl && window.__lastPairEl !== pairFirstEl;
+            const canAnim = changed && window.__lastPairEl && window.__lastPairEl.isConnected && typeof Element.prototype.animate === 'function';
+            (window.__hlAnims || []).forEach(a => { try { a.cancel(); } catch (e) {} });
+            window.__hlAnims = [];
+            let snap = null;
+            if (canAnim) { try { snap = hlSnap(window.__lastPairNo, pairNo); } catch (e) { snap = null; } }
             sentences.forEach((_, idx) => {
                 const el = document.getElementById(`sentence-${idx}`);
                 if (el) {
-                    if (idx === currentIndex) {
+                    if (idx === pairNo) {
                         el.className = "sentence-item p-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 text-amber-200 sentence-active flex items-center justify-between group shadow-sm";
-                        scrollSentenceToCenter(el);
                     } else {
                         el.className = "sentence-item p-3 rounded-2xl border border-transparent hover:bg-blue-600/40 hover:text-white text-stone-300 transition duration-150 flex items-center justify-between group";
                     }
+                    const tsp = el.firstElementChild; // 읽는 문장 글자만 1.3배 (전체 화면은 CSS에서 처리)
+                    if (tsp && tsp.tagName === 'SPAN') tsp.style.fontSize = `${fontSizeScale * 1.125 * (idx === pairNo ? 1.3 : 1)}rem`;
                 }
             });
+            // 화면 이동은 짝이 바뀔 때 한 번만 (같은 짝 안에서는 움직이지 않음)
+            if (changed) {
+                window.__lastPairEl = pairFirstEl;
+                const oldNo = window.__lastPairNo;
+                window.__lastPairNo = pairNo;
+                const esc = !!escalatorOffsets(); // 에스컬레이터 중이면 위치는 계속 따라가는 쪽이 맡음
+                if (snap) {
+                    if (esc) escalatorTick(true); else scrollSentenceToCenter(pairFirstEl, 'instant'); // 위치를 먼저 확정
+                    try { window.__hlAnims = hlAnimate(snap, pairNo); } catch (e) { window.__hlAnims = []; }
+                } else if (esc) {
+                    escalatorTick(true);
+                } else {
+                    scrollSentenceToCenter(pairFirstEl);
+                }
+                if (esc) escalatorStart();
+            } else if (pairFirstEl) { window.__lastPairNo = pairNo; }
+            bandUpdate();
             updateProgressUI();
             saveReadingProgress();
         }
@@ -5876,6 +6250,133 @@ body.day-mode header.border-b {
             }
             return true;
         }
+
+        // ===== 읽는 화면에서 틀린 문장 고치기: 왼쪽 클릭으로 그 순간을 찍고, 오른쪽 클릭 메뉴에서 시간을 다시 나눈다 =====
+        // (오디오북 소리 + 문장별 시간 기록이 있을 때만 동작. 그 밖에는 예전 그대로: 왼쪽 클릭 = 그 문장으로 이동, 오른쪽 클릭 = 기본 메뉴)
+        let abMark = null, abPrev = null, abMenu = null, abNoClickUntil = 0;
+        (function(){ const st = document.createElement('style'); st.textContent = '.sentence-item.ab-mk{ outline:3px solid #f59e0b; outline-offset:-3px; }'; document.head.appendChild(st); })();
+        function abEditCtx() {
+            if (!isFullAudioMode) return null;
+            const ab = document.getElementById('local-audiobook-audio');
+            if (!ab || !isFinite(ab.duration) || !ab.duration) return null;
+            let od = ensureSentenceTimeOffsetsLoaded();
+            if (!od || !Array.isArray(od.offsets) || od.offsets.length === 0 || od.offsets.length !== (od.end - od.start) || od.end > sentences.length) {
+                // 시간표가 없는 소리: 글자 수 비율로 대략 나눈 시간표를 임시로 만들어 그 위에서 고친다 (고치면 그때부터 저장됨)
+                if (!sentences || sentences.length === 0) return null;
+                let st = 0, en = sentences.length;
+                try { const rg = getChapterRanges()[currentChapterIndex]; if (rg && rg.end > rg.start && rg.end <= sentences.length) { st = rg.start; en = rg.end; } } catch (e) {}
+                const w = []; for (let i = st; i < en; i++) { const n = cleanTextForTTS(sentences[i]).replace(/\s/g, '').length; w.push(n > 0 ? n : 2); }
+                const W = w.reduce((x, y) => x + y, 0), offsets = []; let acc = 0;
+                for (let i = 0; i < w.length; i++) { offsets.push(ab.duration * acc / W); acc += w[i]; }
+                od = { bookId: currentBookId, chapterIndex: currentChapterIndex, start: st, end: en, offsets, rate: 1, estimated: true };
+            }
+            return { ab, od };
+        }
+        function abPaintMark() {
+            document.querySelectorAll('.sentence-item.ab-mk').forEach(e => e.classList.remove('ab-mk'));
+            if (abMark) { const e = document.getElementById(`sentence-${abMark.idx}`); if (e) e.classList.add('ab-mk'); }
+        }
+        function abClearMark() { abMark = null; abPaintMark(); }
+        function abMarkClick(idx) { // true = 이 클릭을 '찍기'로 처리함
+            if (Date.now() < abNoClickUntil) return true;
+            const c = abEditCtx(); if (!c || idx < c.od.start || idx >= c.od.end) return false;
+            try { const sel = rwin().getSelection(); if (sel && String(sel).trim()) return true; } catch (e) {}
+            const playing = !c.ab.paused;
+            if (!(abMark && !playing)) {
+                // 지금 재생 위치가 그 문장 자리(앞 문장 시간 ~ 다음 문장 시간)를 벗어났으면(한참 지나갔거나 아직 안 왔으면) 찍지 않고,
+                // 그 문장의 시간 5초 전으로 돌아가서 멈춘다 — 늦게 눌러도 버튼이 먹통이 되지 않게
+                try {
+                    const rate = c.od.rate || currentRate || 1, T1 = c.ab.currentTime * rate, i0 = idx - c.od.start, offs = c.od.offsets;
+                    const prevOff = i0 > 0 ? offs[i0 - 1] : 0, nextOff = i0 < offs.length - 1 ? offs[i0 + 1] : c.ab.duration * rate;
+                    if (T1 < prevOff || T1 > nextOff) {
+                        abClearMark();
+                        c.ab.pause(); c.ab.currentTime = Math.max(0, offs[i0] / rate - 5); // 돌아간 자리에서 멈춘다
+                        return true;
+                    }
+                } catch (e) {}
+            }
+            if (abMark && !playing) abMark.idx = idx; // 이미 멈춰서 찍어 둔 상태면 시간은 그대로, 줄만 바꿈
+            else { if (playing) c.ab.pause(); abMark = { idx, t: c.ab.currentTime, was: playing }; }
+            abPaintMark();
+            return true;
+        }
+        function abCloseMenu() { if (abMenu) { abMenu.remove(); abMenu = null; } }
+        function abDismiss() { if (!abMenu) return; abCloseMenu(); const c = abEditCtx(); if (abMark && abMark.was && c) { c.ab.play().catch(() => {}); } abClearMark(); abNoClickUntil = Date.now() + 400; }
+        function abSaveOffsets(od, offs) {
+            const rate = od.rate || currentRate || 1;
+            const rec = { start: od.start, end: od.end, offsets: offs.slice(), rate };
+            const ch = (typeof od.chapterIndex === 'number') ? od.chapterIndex : currentChapterIndex;
+            sentenceTimeOffsets = { bookId: currentBookId, chapterIndex: ch, ...rec };
+            try {
+                localStorage.setItem(`ab_offsets::${currentBookId}::${ch}`, JSON.stringify(rec));
+                localStorage.setItem(`ab_offsets_edit::${currentBookId}::${ch}`, JSON.stringify({ ...rec, textHash: computeSentencesHash(), sentenceCount: sentences.length }));
+            } catch (e) { console.warn('시간 저장 실패', e); }
+        }
+        function abApply(mode, k, tNow) {
+            const c = abEditCtx(); if (!c) return false;
+            const { ab, od } = c; const rate = od.rate || currentRate || 1;
+            const T1 = tNow * rate, total = ab.duration * rate, i0 = k - od.start;
+            if (i0 < 0 || i0 >= od.offsets.length) return false;
+            if (i0 > 0 && T1 < od.offsets[i0 - 1]) { alert('이 문장의 시간이 바로 앞 문장보다 빠릅니다.\n앞 문장을 찍어서 다시 해 주세요.'); return false; }
+            if (mode === 'one' && i0 < od.offsets.length - 1 && T1 > od.offsets[i0 + 1]) { alert('이 문장의 시간이 바로 다음 문장보다 늦습니다.\n뒤 문장까지 함께 고치려면 "여기부터 다시 배분"을 쓰세요.'); return false; }
+            if (mode === 'from' && !(T1 < total - 1)) { alert('재생 위치가 끝에 너무 가깝습니다.'); return false; }
+            const offs = od.offsets.slice();
+            abPrev = { od: { ...od }, offsets: od.offsets.slice() };
+            if (mode === 'one') { offs[i0] = T1; }
+            else {
+                const w = []; for (let i = k; i < od.end; i++) { const n = cleanTextForTTS(sentences[i]).replace(/\s/g, '').length; w.push(n > 0 ? n : 2); }
+                const W = w.reduce((a, b) => a + b, 0); let acc = 0;
+                for (let i = k; i < od.end; i++) { offs[i - od.start] = T1 + (total - T1) * acc / W; acc += w[i - k]; }
+            }
+            abSaveOffsets(od, offs);
+            setStatus(mode === 'one' ? '이 문장 시간만 바꿨어요.' : '이 문장부터 끝까지 시간을 다시 나눴어요. 파일에 넣으려면 시간 맞추기의 저장을 누르세요.');
+            return true;
+        }
+        function abUndo() {
+            if (!abPrev) return false;
+            if (abPrev.od.estimated) { // 시간표가 없던 소리의 첫 수정이면, 되돌리면 시간표 없는 상태로
+                const ch = (typeof abPrev.od.chapterIndex === 'number') ? abPrev.od.chapterIndex : currentChapterIndex;
+                try { localStorage.removeItem(`ab_offsets::${currentBookId}::${ch}`); localStorage.removeItem(`ab_offsets_edit::${currentBookId}::${ch}`); } catch (e) {}
+                sentenceTimeOffsets = null; abPrev = null;
+            } else { abSaveOffsets(abPrev.od, abPrev.offsets); abPrev = null; }
+            setStatus('방금 고친 것을 되돌렸어요.');
+            return true;
+        }
+        function abOpenMenu(x, y, idx) {
+            abCloseMenu();
+            const c = abEditCtx(); if (!c) return;
+            let tNow, was;
+            if (abMark) { idx = abMark.idx; tNow = abMark.t; was = abMark.was; }
+            else { was = !c.ab.paused; if (was) c.ab.pause(); tNow = c.ab.currentTime; abMark = { idx, t: tNow, was }; abPaintMark(); }
+            const m = document.createElement('div'); abMenu = m;
+            m.style.cssText = 'position:fixed;z-index:99999;background:#fff;color:#1c1917;border:1px solid #a8a29e;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.35);padding:6px;display:flex;flex-direction:column;gap:2px;min-width:220px;';
+            const add = (label, fn) => {
+                const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+                b.style.cssText = 'text-align:left;padding:10px 14px;font-size:15pt;border-radius:8px;background:transparent;color:#1c1917;cursor:pointer;border:0;';
+                b.onmouseenter = () => { b.style.background = '#fef3c7'; }; b.onmouseleave = () => { b.style.background = 'transparent'; };
+                b.onclick = e => { e.stopPropagation(); abCloseMenu(); const ok = fn(); abClearMark(); abNoClickUntil = Date.now() + 400; ab2Back(tNow); }; // 성공하든 안내창이 뜨든, 항상 찍은 시간의 5초 전으로 돌아가 다시 재생
+                m.appendChild(b);
+            };
+            add('⚖ 여기부터 다시 배분', () => abApply('from', idx, tNow));
+            add('⏱ 이 줄 시간만 바꾸기', () => abApply('one', idx, tNow));
+            if (abPrev) add('↶ 방금 고친 것 되돌리기', () => abUndo());
+            rdoc().body.appendChild(m);
+            const w = m.offsetWidth, h = m.offsetHeight;
+            m.style.left = Math.max(4, Math.min(x, rwin().innerWidth - w - 4)) + 'px'; m.style.top = Math.max(4, Math.min(y, rwin().innerHeight - h - 4)) + 'px';
+        }
+        function ab2Back(tNow) { // 고친 뒤: 기준 위치의 5초 전부터 다시 재생
+            const c = abEditCtx(); const ab = c ? c.ab : document.getElementById('local-audiobook-audio'); if (!ab) return;
+            try { ab.currentTime = Math.max(0, tNow - 5); ab.play().catch(() => {}); } catch (e) {}
+        }
+        document.addEventListener('contextmenu', e => {
+            const row = e.target.closest ? e.target.closest('#sentence-list .sentence-item') : null; if (!row) return;
+            const c = abEditCtx(); if (!c) return;
+            const idx = Number(String(row.id).replace('sentence-', ''));
+            const k = abMark ? abMark.idx : idx; if (!(k >= c.od.start && k < c.od.end)) return;
+            e.preventDefault(); abOpenMenu(e.clientX, e.clientY, k);
+        });
+        document.addEventListener('pointerdown', e => { if (abMenu && !abMenu.contains(e.target)) abDismiss(); }, true);
+
 
         function jumpToSentence(idx) {
             if (idx >= 0 && idx < sentences.length) {
@@ -8733,8 +9234,9 @@ body.day-mode header.border-b {
         }
 
         document.addEventListener('keydown', (e) => {
-            const tag = (document.activeElement && document.activeElement.tagName) || '';
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.isContentEditable)) return;
+            const ae = (e.target && e.target.ownerDocument ? e.target.ownerDocument.activeElement : document.activeElement);
+            const tag = (ae && ae.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || (ae && ae.isContentEditable)) return;
             // 모달(팝업 창)이 열려있을 때는 단축키가 그 안의 조작과 헷갈리지 않도록 끈다.
             const anyModalOpen = document.querySelector('.fixed.inset-0:not(.hidden)');
             if (anyModalOpen) return;
@@ -8968,6 +9470,11 @@ body.day-mode header.border-b {
     style.textContent = `
       #reader-scroll-slider { position: fixed; width: 18px; z-index: 40; display: none; touch-action: none; user-select: none; }
       #reader-scroll-slider.fs { z-index: 205; }
+      /* 전체화면: 바 오른쪽을 창 경계선과 한 몸으로 (오른쪽은 직선·테두리 없음, 왼쪽만 둥글게) */
+      #reader-scroll-slider.fs #reader-scroll-track { left: 10px; border-radius: 3px 0 0 3px; }
+      #reader-scroll-slider.fs #reader-scroll-thumb { left: -8px; border-radius: 7px 0 0 7px; border-right: none; box-shadow: -1px 1px 4px rgba(0,0,0,0.45); }
+      #reader-container.reader-fullscreen-active { scrollbar-width: none; }
+      #reader-container.reader-fullscreen-active::-webkit-scrollbar { display: none; width: 0; height: 0; }
       #reader-scroll-track { position: absolute; left: 6px; top: 0; bottom: 0; width: 6px; border-radius: 3px; background: rgba(120,113,108,0.40); }
       #reader-scroll-thumb { position: absolute; left: -4px; width: 14px; height: 34px; border-radius: 7px; background: #f59e0b; border: 2px solid rgba(255,255,255,0.85); box-shadow: 0 1px 4px rgba(0,0,0,0.45); cursor: grab; }
       #reader-scroll-slider.dragging #reader-scroll-thumb { cursor: grabbing; background: #fbbf24; }
@@ -9009,9 +9516,9 @@ body.day-mode header.border-b {
       const header = document.querySelector('header');
       const headerBottom = header ? header.getBoundingClientRect().bottom : 0;
       const topLimit = fs ? 72 : Math.max(r.top + 12, headerBottom + 8);
-      const bottomLimit = Math.min(r.bottom - 12, window.innerHeight - 8);
+      const bottomLimit = Math.min(r.bottom - 12, rwin().innerHeight - 8);
       const h = bottomLimit - topLimit;
-      if (m.max <= 4 || h < THUMB_H + 20 || r.bottom < 40 || r.top > window.innerHeight - 40) {
+      if (m.max <= 4 || h < THUMB_H + 20 || r.bottom < 40 || r.top > rwin().innerHeight - 40) {
         wrap.style.display = 'none';
         return;
       }
@@ -9023,11 +9530,14 @@ body.day-mode header.border-b {
       // 빈자리가 바 폭보다 좁거나 전체화면이면, 본문 박스 안쪽 오른쪽 가장자리(스크롤바 왼쪽)에 놓는다.
       const aside = document.querySelector('aside');
       const gap = aside ? aside.getBoundingClientRect().left - r.right : 0;
-      if (!fs && gap >= 20) {
+      if (fs) {
+        // 전체화면: 주황 막대가 창 오른쪽 경계선에 딱 닿게 (막대 오른쪽 끝 = 창 오른쪽 끝)
+        wrap.style.left = (rwin().innerWidth - 16) + 'px';
+      } else if (gap >= 20) {
         wrap.style.left = (r.right + (gap - 18) / 2) + 'px';
       } else {
         const sbw = Math.max(0, c.offsetWidth - c.clientWidth);
-        wrap.style.left = (Math.min(r.right, window.innerWidth) - sbw - 6 - 18) + 'px';
+        wrap.style.left = (Math.min(r.right, rwin().innerWidth) - sbw - 6 - 18) + 'px';
       }
       if (!dragging) {
         const ratio = Math.min(1, Math.max(0, m.top / m.max));
@@ -9078,7 +9588,7 @@ body.day-mode header.border-b {
 
     // 본문이 스크롤되거나 화면 크기·내용이 바뀌면 손잡이 위치를 다시 맞춘다.
     let raf = 0;
-    function schedule() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; layout(); }); }
+    function schedule() { if (raf) return; raf = rwin().requestAnimationFrame(() => { raf = 0; layout(); }); }
     window.addEventListener('scroll', schedule, true);   // 본문 박스 안의 스크롤도 잡도록 capture
     window.addEventListener('resize', schedule);
     document.addEventListener('DOMContentLoaded', () => {
