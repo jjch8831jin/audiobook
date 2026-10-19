@@ -5598,7 +5598,7 @@ body.day-mode header.border-b {
                 textSpan.style.fontSize = `${fontSizeScale * 1.125}rem`;
                 textSpan.className = "flex-1 cursor-pointer";
                 textSpan.innerText = sentence;
-                textSpan.onclick = () => { if(abMarkClick(idx)) return; jumpToSentence(idx); };
+                textSpan.onclick = (e) => { if(abMarkClick(e, idx)) return; jumpToSentence(idx); };
 
                 // 읽다가 고칠 곳이 보이면, 마우스를 올렸을 때 나오는 ✎수정을 눌러 그 자리에서 바로 고친다.
                 // (찾기 창에서 검색하지 않아도 된다. 지금 읽는 문장에는 항상 보인다 — 아래 스타일 참고)
@@ -6277,7 +6277,7 @@ body.day-mode header.border-b {
             if (abMark) { const e = document.getElementById(`sentence-${abMark.idx}`); if (e) e.classList.add('ab-mk'); }
         }
         function abClearMark() { abMark = null; abPaintMark(); }
-        function abMarkClick(idx) { // true = 이 클릭을 '찍기'로 처리함
+        function abMarkClick(e, idx) { // true = 이 클릭을 '찍기'로 처리함
             if (Date.now() < abNoClickUntil) return true;
             const c = abEditCtx(); if (!c || idx < c.od.start || idx >= c.od.end) return false;
             try { const sel = rwin().getSelection(); if (sel && String(sel).trim()) return true; } catch (e) {}
@@ -6298,6 +6298,10 @@ body.day-mode header.border-b {
             if (abMark && !playing) abMark.idx = idx; // 이미 멈춰서 찍어 둔 상태면 시간은 그대로, 줄만 바꿈
             else { if (playing) c.ab.pause(); abMark = { idx, t: c.ab.currentTime, was: playing }; }
             abPaintMark();
+            // 왼쪽 클릭으로 찍은 바로 그 자리에, 오른쪽 클릭 메뉴와 같은 메뉴를 바로 띄운다
+            const x = (e && typeof e.clientX === 'number') ? e.clientX : rwin().innerWidth / 2;
+            const y = (e && typeof e.clientY === 'number') ? e.clientY : rwin().innerHeight / 2;
+            abOpenMenu(x, y, idx);
             return true;
         }
         function abCloseMenu() { if (abMenu) { abMenu.remove(); abMenu = null; } }
