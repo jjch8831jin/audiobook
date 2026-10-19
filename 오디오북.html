@@ -5598,7 +5598,17 @@ body.day-mode header.border-b {
                 textSpan.style.fontSize = `${fontSizeScale * 1.125}rem`;
                 textSpan.className = "flex-1 cursor-pointer";
                 textSpan.innerText = sentence;
-                textSpan.onclick = (e) => { if(abMarkClick(e, idx)) return; jumpToSentence(idx); };
+                textSpan.onclick = (e) => { // 두 번 클릭이면 이 클릭은 무시하고(아래 ondblclick이 처리), 한 번 클릭일 때만 시간 찍기
+                    const cx = e.clientX, cy = e.clientY;
+                    clearTimeout(textSpan._clickT);
+                    textSpan._clickT = setTimeout(() => { if(abMarkClick({ clientX: cx, clientY: cy }, idx)) return; jumpToSentence(idx); }, 260);
+                };
+                textSpan.ondblclick = (e) => { // 두 번 클릭: 시간 찍기가 아니라 그 문장으로 바로 이동해서 읽기
+                    clearTimeout(textSpan._clickT);
+                    try { const sel = rwin().getSelection(); if (sel) sel.removeAllRanges(); } catch (err) {}
+                    abCloseMenu(); abClearMark();
+                    jumpToSentence(idx);
+                };
 
                 // 읽다가 고칠 곳이 보이면, 마우스를 올렸을 때 나오는 ✎수정을 눌러 그 자리에서 바로 고친다.
                 // (찾기 창에서 검색하지 않아도 된다. 지금 읽는 문장에는 항상 보인다 — 아래 스타일 참고)
